@@ -1,0 +1,16 @@
+{
+  "name": "sp5555-portfolio",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.166.1"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}

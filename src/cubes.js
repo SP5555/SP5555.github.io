@@ -1,0 +1,223 @@
+import * as THREE from "three";
+
+const PALETTE_SETS = [
+  [0x4fd8ff, 0x5b7fff, 0x7c5cff, 0x9b5cf0],
+  [0xff4d4d, 0xff8c42, 0xffc94d],
+  [0xff4fd8, 0xd84fff, 0x4fe8ff],
+  [0x8ba888, 0xd9c17c, 0xd98e6b, 0xa8785a],
+];
+
+function toColorArray(hexes) {
+  return hexes.map((c) => new THREE.Color(c));
+}
+
+let paletteIndex = Math.floor(Math.random() * PALETTE_SETS.length);
+let PALETTE = toColorArray(PALETTE_SETS[paletteIndex]);
+const BLACK = new THREE.Color(0x000000);
+
+const PALETTE_SWAP_INTERVAL = 30; // seconds between full-palette swaps
+const PALETTE_GLITCH_DURATION = 0.16; // chaotic strobe duration during a swap
+let nextPaletteSwapAt = PALETTE_SWAP_INTERVAL;
+let paletteGlitchUntil = -Infinity;
+
+const GRID_Y = -5;
+const GRID_Z_OFFSET = -40; // push the whole field behind the camera's frustum start
+const HOLD = 0.5; // grid sits still & dark before the wave starts
+const WAVE_SWEEP = 1.4; // time for the light-up wave to cross the whole grid
+const IGNITE_FADE = 0.6; // black -> lit duration, per cube
+const PAUSE_AFTER_LIGHT = -1.0; // beat of stillness once everything is lit
+const THROW_STAGGER = 2.0; // spread of throw start times across the field
+const THROW_PHASE_START =
+  HOLD + WAVE_SWEEP + IGNITE_FADE + PAUSE_AFTER_LIGHT;
+const DRIFT_RAMP = 0.6; // fade the floating drift in smoothly after landing
+const GRID_SPACING = 2.4;
+const SIDE_JITTER = 1.5; // max lateral drift from a cube's grid column/row
+const LEVITATE_MIN = 1; // minimum height above the floor for resting cubes
+const LEVITATE_RANGE = 14; // spread of resting heights above that minimum
+const IGNITE_JITTER = 0.2; // tiny per-cube randomness on top of the wave
+const FLICKER_MIN_INTERVAL = 4; // seconds between a cube's flicker events
+const FLICKER_MAX_INTERVAL = 60;
+const FLICKER_DURATION = 0.15; // how long the strobe itself lasts
+
+function smoothstep(t) {
+  return t * t * (3 - 2 * t);
+}
+
+function easeInOutQuint(t) {
+  return t < 0.5 ? 16 * t ** 5 : 1 - Math.pow(-2 * t + 2, 5) / 2;
+}
+
+const CUBE_SCALE = 1.2;
+
+export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
+  const count = gridCols * gridRows;
+  const geometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+  const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const mesh = new THREE.InstancedMesh(geometry, material, count);
+
+  const dummy = new THREE.Object3D();
+  const tmpColor = new THREE.Color();
+  const flightPos = new THREE.Vector3();
+  const instances = [];
+
+  const cols = gridCols;
+  const rows = gridRows;
+  const spacing = GRID_SPACING;
+
+  let maxDist = 1;
+
+  for (let i = 0; i < count; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const gridPos = new THREE.Vector3(
+      (col - (cols - 1) / 2) * spacing,
+      GRID_Y,
+      (row - (rows - 1) / 2) * spacing + GRID_Z_OFFSET
+    );
+
+    const restPosition = new THREE.Vector3(
+      gridPos.x + (Math.random() - 0.5) * SIDE_JITTER,
+      GRID_Y + LEVITATE_MIN + Math.random() * LEVITATE_RANGE,
+      gridPos.z + (Math.random() - 0.5) * SIDE_JITTER
+    );
+
+    const dist = Math.abs(gridPos.x);
+    if (dist > maxDist) maxDist = dist;
+
+    const rotationSpeed = new THREE.Vector3(
+      (Math.random() - 0.5) * 0.4,
+      (Math.random() - 0.5) * 0.4,
+      (Math.random() - 0.5) * 0.4
+    );
+    const tumbleAxis = new THREE.Vector3(
+      Math.random() - 0.5,
+      Math.random() - 0.5,
+      Math.random() - 0.5
+    );
+
+    instances.push({
+      gridPos,
+      restPosition,
+      dist,
+      rotationSpeed,
+      tumbleAxis,
+      driftPhase: Math.random() * Math.PI * 2,
+      driftSpeed: 0.15 + Math.random() * 0.25,
+      colorPhase: Math.random() * PALETTE.length,
+      colorSpeed: 0.04 + Math.random() * 0.08,
+      throwDuration: 1.5 + Math.random() * 0.5,
+      igniteJitter: (Math.random() - 0.5) * IGNITE_JITTER,
+      nextFlickerAt:
+        FLICKER_MIN_INTERVAL +
+        Math.random() * (FLICKER_MAX_INTERVAL - FLICKER_MIN_INTERVAL),
+      flickerUntil: -Infinity,
+    });
+
+    dummy.position.copy(gridPos);
+    dummy.scale.setScalar(CUBE_SCALE);
+    dummy.updateMatrix();
+    mesh.setMatrixAt(i, dummy.matrix);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+
+  function update(elapsed) {
+    if (elapsed >= nextPaletteSwapAt) {
+      let nextIndex = Math.floor(Math.random() * PALETTE_SETS.length);
+      if (PALETTE_SETS.length > 1 && nextIndex === paletteIndex) {
+        nextIndex = (nextIndex + 1) % PALETTE_SETS.length;
+      }
+      paletteIndex = nextIndex;
+      PALETTE = toColorArray(PALETTE_SETS[paletteIndex]);
+      paletteGlitchUntil = elapsed + PALETTE_GLITCH_DURATION;
+      nextPaletteSwapAt = elapsed + PALETTE_SWAP_INTERVAL;
+    }
+    const inPaletteGlitch = elapsed < paletteGlitchUntil;
+
+    for (let i = 0; i < count; i++) {
+      const inst = instances[i];
+      const distRatio = inst.dist / maxDist;
+
+      const igniteStart = HOLD + distRatio * WAVE_SWEEP + inst.igniteJitter;
+      const throwStart = THROW_PHASE_START + distRatio * THROW_STAGGER;
+      const landTime = throwStart + inst.throwDuration;
+      const throwT = Math.min(
+        Math.max((elapsed - throwStart) / inst.throwDuration, 0),
+        1
+      );
+
+      // base spin blends smoothly from 0 (held) to the steady-state rate,
+      // with a gentle extra tumble mid-flight that fades back out to zero
+      const spinBlend = smoothstep(throwT);
+      const tumble = Math.sin(Math.PI * throwT) ** 2 * 2.2;
+
+      dummy.rotation.set(
+        elapsed * inst.rotationSpeed.x * spinBlend +
+          tumble * inst.tumbleAxis.x,
+        elapsed * inst.rotationSpeed.y * spinBlend +
+          tumble * inst.tumbleAxis.y,
+        elapsed * inst.rotationSpeed.z * spinBlend +
+          tumble * inst.tumbleAxis.z
+      );
+
+      if (throwT <= 0) {
+        flightPos.copy(inst.gridPos);
+      } else if (throwT < 1) {
+        const eased = easeInOutQuint(throwT);
+        flightPos.lerpVectors(inst.gridPos, inst.restPosition, eased);
+      } else {
+        const driftBlend = smoothstep(
+          Math.min(Math.max((elapsed - landTime) / DRIFT_RAMP, 0), 1)
+        );
+        flightPos.set(
+          inst.restPosition.x,
+          inst.restPosition.y +
+            Math.sin(elapsed * inst.driftSpeed + inst.driftPhase) *
+              0.1 *
+              driftBlend,
+          inst.restPosition.z
+        );
+      }
+
+      dummy.position.copy(flightPos);
+      dummy.scale.setScalar(CUBE_SCALE);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(i, dummy.matrix);
+
+      const igniteT = Math.min(
+        Math.max((elapsed - igniteStart) / IGNITE_FADE, 0),
+        1
+      );
+      const igniteProgress = smoothstep(igniteT);
+
+      if (igniteProgress >= 1 && elapsed >= inst.nextFlickerAt) {
+        inst.colorPhase = Math.random() * PALETTE.length;
+        inst.flickerUntil = elapsed + FLICKER_DURATION;
+        inst.nextFlickerAt =
+          elapsed +
+          FLICKER_MIN_INTERVAL +
+          Math.random() * (FLICKER_MAX_INTERVAL - FLICKER_MIN_INTERVAL);
+      }
+
+      const t = elapsed * inst.colorSpeed + inst.colorPhase;
+      const i0 = Math.floor(t) % PALETTE.length;
+      const i1 = (i0 + 1) % PALETTE.length;
+      const frac = t - Math.floor(t);
+      tmpColor.lerpColors(PALETTE[i0], PALETTE[i1], frac);
+      tmpColor.lerpColors(BLACK, tmpColor, igniteProgress);
+
+      if (elapsed < inst.flickerUntil) {
+        tmpColor.multiplyScalar(Math.random() < 0.5 ? 0.15 : 1.8);
+      }
+
+      if (inPaletteGlitch) {
+        tmpColor.multiplyScalar(Math.random() < 0.5 ? 0.1 : 2.2);
+      }
+
+      mesh.setColorAt(i, tmpColor);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.instanceColor.needsUpdate = true;
+  }
+
+  return { mesh, update };
+}
