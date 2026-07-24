@@ -7,10 +7,13 @@ const RADIUS = 10;
 const GROUP_Z_OFFSET = -2; // push the (now bigger) sphere back so it doesn't engulf the camera
 const DETAIL = 5;
 const NODE_SIZE = 0.22;
-const PULSE_SIZE = 0.16;
-const PULSE_COUNT = 30;
-const PULSE_SPEED_MIN = 0.35; // fraction of an edge crossed per second
-const PULSE_SPEED_MAX = 0.7;
+const PULSE_COUNT = 60;
+const PULSE_SPEED_MIN = 1.6; // fraction of an edge crossed per second
+const PULSE_SPEED_MAX = 2.0;
+const PULSE_SEGMENTS = 8; // sub-segments per pulse's own tiny trail geometry
+const PULSE_GLOW_WIDTH = 0.26; // width (in edge-parametric units) of the glow peak
+const PULSE_RANGE_PAD = 0.35; // travel this far past each end before entering/leaving, so the peak fades in/out instead of snapping
+const PULSE_BRIGHTNESS = 2.8;
 const ROTATE_SPEED_Y = 0.05;
 const ROTATE_SPEED_X = 0.02;
 const FLICKER_MIN_INTERVAL = 3;
@@ -21,7 +24,7 @@ const IGNITE_HOLD = 0.3; // pause before the light-up wave starts
 const IGNITE_SWEEP = 1.4; // time for the wave to travel from top to bottom
 const IGNITE_FADE = 0.5; // black -> lit duration, per node/edge
 const IGNITE_JITTER = 0.15; // tiny per-node randomness on top of the wave
-const EDGE_PHASE_PAUSE = -1.0; // beat of stillness once every node is fully lit
+const EDGE_PHASE_PAUSE = -1.0; // gap between "all nodes lit" and the edges' own wave starting (negative = starts slightly before that point)
 const EDGE_SWEEP = 2.4; // time for the edges' own wave to cross the structure
 const EDGE_TRAVEL_DURATION = 0.2; // time for the light to travel end-to-end along one edge
 const PULSE_SPAWN_STAGGER = 3.2; // spread of pulse spawn times after the edges finish
@@ -115,31 +118,47 @@ export function createGeoSphereField() {
   const edgeMaterial = new THREE.LineBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: 0.6,
+    opacity: 0.1,
   });
   const edgeLines = new THREE.LineSegments(edgeGeometry, edgeMaterial);
   group.add(edgeLines);
 
-  // ---- Pulses: small bright markers traveling along random edges ----
-  // Each pulse stays hidden and un-spawned until its own staggered spawnAt
-  // (after the edges finish lighting), at which point t starts at 0 so it
-  // visibly emerges from a node instead of popping in mid-edge.
-  const pulseGeometry = new THREE.IcosahedronGeometry(PULSE_SIZE, 0);
-  const pulseMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  const pulseMesh = new THREE.InstancedMesh(
-    pulseGeometry,
-    pulseMaterial,
-    PULSE_COUNT
+  // ---- Pulses: a moving brightness peak rendered purely via vertex colors
+  // on a small dedicated line buffer per pulse — no mesh markers. Each
+  // pulse gets its own tiny subdivided trail (PULSE_SEGMENTS sub-segments)
+  // that repositions onto whichever edge it currently occupies; a
+  // Gaussian-ish falloff around its current parametric position `t` makes
+  // the glow travel smoothly without needing to subdivide the (huge) main
+  // wireframe itself.
+  const pulsePositions = new Float32Array(
+    PULSE_COUNT * PULSE_SEGMENTS * 2 * 3
   );
+  const pulseColors = new Float32Array(PULSE_COUNT * PULSE_SEGMENTS * 2 * 3);
+  const pulseGeometry = new THREE.BufferGeometry();
+  pulseGeometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(pulsePositions, 3)
+  );
+  pulseGeometry.setAttribute(
+    "color",
+    new THREE.BufferAttribute(pulseColors, 3)
+  );
+  const pulseMaterial = new THREE.LineBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    opacity: 1,
+  });
+  const pulseLines = new THREE.LineSegments(pulseGeometry, pulseMaterial);
+  group.add(pulseLines);
+
   const pulseState = Array.from({ length: PULSE_COUNT }, () => ({
     edgeIndex: Math.floor(Math.random() * edges.length),
-    t: 0,
+    t: -PULSE_RANGE_PAD,
     spawnAt: fullyLitAt + Math.random() * PULSE_SPAWN_STAGGER,
     speed:
       PULSE_SPEED_MIN + Math.random() * (PULSE_SPEED_MAX - PULSE_SPEED_MIN),
     colorPhase: Math.random() * paletteCycler.palette.length,
   }));
-  group.add(pulseMesh);
 
   let lastElapsed = 0;
 
@@ -222,38 +241,76 @@ export function createGeoSphereField() {
     }
     colorAttr.needsUpdate = true;
 
-    // pulses — each one spawns individually, staggered after the edges finish
+    // pulses — each one spawns individually, staggered after the edges
+    // finish, then its tiny trail geometry repositions onto whichever edge
+    // it currently occupies with a moving brightness peak along it
+    const pulsePosAttr = pulseGeometry.attributes.position;
+    const pulseColorAttr = pulseGeometry.attributes.color;
     for (let i = 0; i < PULSE_COUNT; i++) {
       const pulse = pulseState[i];
       const spawned = elapsed >= pulse.spawnAt;
 
       if (spawned) {
         pulse.t += pulse.speed * dt;
-        if (pulse.t >= 1) {
-          pulse.t = 0;
+        if (pulse.t >= 1 + PULSE_RANGE_PAD) {
+          pulse.t = -PULSE_RANGE_PAD;
           pulse.edgeIndex = Math.floor(Math.random() * edges.length);
         }
       }
 
       const [a, b] = edges[pulse.edgeIndex];
-      dummy.position.lerpVectors(vertices[a], vertices[b], pulse.t);
-      dummy.scale.setScalar(spawned ? 1 : 0);
-      dummy.updateMatrix();
-      pulseMesh.setMatrixAt(i, dummy.matrix);
 
-      sampleCyclingColor(
-        palette,
-        elapsed * 0.15 + pulse.colorPhase,
-        tmpColor
-      );
-      tmpColor.multiplyScalar(1.6);
+      sampleCyclingColor(palette, elapsed * 0.15 + pulse.colorPhase, tmpColor);
+      tmpColor.multiplyScalar(PULSE_BRIGHTNESS);
       if (inPaletteGlitch) {
         tmpColor.multiplyScalar(Math.random() < 0.5 ? 0.1 : 2.2);
       }
-      pulseMesh.setColorAt(i, tmpColor);
+
+      for (let k = 0; k < PULSE_SEGMENTS; k++) {
+        const segIndex = i * PULSE_SEGMENTS + k;
+        const localT0 = k / PULSE_SEGMENTS;
+        const localT1 = (k + 1) / PULSE_SEGMENTS;
+
+        dummy.position.lerpVectors(vertices[a], vertices[b], localT0);
+        pulsePosAttr.setXYZ(
+          segIndex * 2,
+          dummy.position.x,
+          dummy.position.y,
+          dummy.position.z
+        );
+        dummy.position.lerpVectors(vertices[a], vertices[b], localT1);
+        pulsePosAttr.setXYZ(
+          segIndex * 2 + 1,
+          dummy.position.x,
+          dummy.position.y,
+          dummy.position.z
+        );
+
+        const intensity0 = spawned
+          ? Math.exp(-(((localT0 - pulse.t) / PULSE_GLOW_WIDTH) ** 2))
+          : 0;
+        const intensity1 = spawned
+          ? Math.exp(-(((localT1 - pulse.t) / PULSE_GLOW_WIDTH) ** 2))
+          : 0;
+
+        pulseColorAttr.setXYZ(
+          segIndex * 2,
+          tmpColor.r * intensity0,
+          tmpColor.g * intensity0,
+          tmpColor.b * intensity0
+        );
+        pulseColorAttr.setXYZ(
+          segIndex * 2 + 1,
+          tmpColor.r * intensity1,
+          tmpColor.g * intensity1,
+          tmpColor.b * intensity1
+        );
+      }
     }
-    pulseMesh.instanceMatrix.needsUpdate = true;
-    pulseMesh.instanceColor.needsUpdate = true;
+    pulsePosAttr.needsUpdate = true;
+    pulseColorAttr.needsUpdate = true;
+
+    return inPaletteGlitch;
   }
 
   return { mesh: group, update };

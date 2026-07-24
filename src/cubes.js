@@ -7,7 +7,7 @@ const GRID_Z_OFFSET = -40; // push the whole field behind the camera's frustum s
 const HOLD = 0.5; // grid sits still & dark before the wave starts
 const WAVE_SWEEP = 1.4; // time for the light-up wave to cross the whole grid
 const IGNITE_FADE = 0.6; // black -> lit duration, per cube
-const PAUSE_AFTER_LIGHT = -1.0; // beat of stillness once everything is lit
+const PAUSE_AFTER_LIGHT = -1.0; // gap between "everything lit" and the throw phase starting (negative = starts slightly before that point)
 const THROW_STAGGER = 2.0; // spread of throw start times across the field
 const THROW_PHASE_START =
   HOLD + WAVE_SWEEP + IGNITE_FADE + PAUSE_AFTER_LIGHT;
@@ -180,6 +180,8 @@ export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
     }
     mesh.instanceMatrix.needsUpdate = true;
     mesh.instanceColor.needsUpdate = true;
+
+    return inPaletteGlitch;
   }
 
   return { mesh, update };

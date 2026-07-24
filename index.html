@@ -24,6 +24,7 @@
   <body>
     <canvas id="bg"></canvas>
     <div id="scrim"></div>
+    <div id="scene-fade-overlay"></div>
 
     <main id="content">
       <section class="hero">
@@ -335,6 +336,23 @@
         <p>Set Paing &middot; setpaing20022002@gmail.com</p>
       </footer>
     </main>
+
+    <div class="scene-picker" role="group" aria-label="Background scene">
+      <button
+        class="glass-card scene-btn"
+        data-scene="cubes"
+        aria-label="Background scene 1"
+      >
+        1
+      </button>
+      <button
+        class="glass-card scene-btn"
+        data-scene="network"
+        aria-label="Background scene 2"
+      >
+        2
+      </button>
+    </div>
 
     <button id="back-to-top" class="glass-card back-to-top" aria-label="Back to top">
       <svg viewBox="0 0 24 24" aria-hidden="true">

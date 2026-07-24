@@ -3,8 +3,24 @@ import { createBackground } from "./background.js";
 import { initScrollReveal } from "./reveal.js";
 
 const canvas = document.getElementById("bg");
-createBackground(canvas);
+const background = createBackground(canvas);
 initScrollReveal();
+
+const sceneButtons = document.querySelectorAll(".scene-btn");
+
+function setActiveSceneButton(sceneId) {
+  sceneButtons.forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.scene === sceneId);
+  });
+}
+setActiveSceneButton(background.getActiveSceneId());
+
+sceneButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    background.setScene(btn.dataset.scene);
+    setActiveSceneButton(btn.dataset.scene);
+  });
+});
 
 const backToTop = document.getElementById("back-to-top");
 const prefersReducedMotion = window.matchMedia(
