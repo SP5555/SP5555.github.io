@@ -3,10 +3,16 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { createCubeField } from "./cubes.js";
+import { createGeoSphereField } from "./geoSphere.js";
 
 const prefersReducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)"
 ).matches;
+
+// Each factory returns { mesh: Object3D, update(elapsed) } — one is picked
+// at random on load, so the two scenes are completely interchangeable from
+// background.js's point of view.
+const SCENE_FACTORIES = [createCubeField, createGeoSphereField];
 
 export function createBackground(canvas) {
   const renderer = new THREE.WebGLRenderer({
@@ -29,15 +35,19 @@ export function createBackground(canvas) {
   );
   camera.position.set(0, 0, 9);
 
-  const cubeGroup = new THREE.Group();
-  const { mesh: cubeMesh, update: updateCubes } = createCubeField();
-  cubeGroup.add(cubeMesh);
-  scene.add(cubeGroup);
+  const sceneGroup = new THREE.Group();
+  // TEMP: forced to the geodesic sphere for tuning — swap back to
+  // SCENE_FACTORIES[Math.floor(Math.random() * SCENE_FACTORIES.length)]
+  // once we're done debugging it.
+  const factory = createGeoSphereField;
+  const { mesh: fieldMesh, update: updateField } = factory();
+  sceneGroup.add(fieldMesh);
+  scene.add(sceneGroup);
 
   if (prefersReducedMotion) {
     // skip the intro/drift animation entirely — jump straight to the
     // settled, fully-lit resting state and never animate again
-    updateCubes(60);
+    updateField(60);
   }
 
   const renderTarget = new THREE.WebGLRenderTarget(
@@ -51,7 +61,7 @@ export function createBackground(canvas) {
     new THREE.Vector2(window.innerWidth, window.innerHeight),
     1.5, // strength
     0.6, // radius
-    0.0  // threshold
+    0.0 // threshold
   );
   composer.addPass(bloomPass);
 
@@ -93,12 +103,12 @@ export function createBackground(canvas) {
     const elapsed = clock.getElapsedTime();
 
     if (!prefersReducedMotion) {
-      updateCubes(elapsed);
+      updateField(elapsed);
 
       current.rotX += (target.rotX - current.rotX) * 0.04;
       current.rotY += (target.rotY - current.rotY) * 0.04;
-      cubeGroup.rotation.x = current.rotX;
-      cubeGroup.rotation.y = current.rotY;
+      sceneGroup.rotation.x = current.rotX;
+      sceneGroup.rotation.y = current.rotY;
 
       const p = scrollProgress();
       camera.position.y = 3 - p * 6;

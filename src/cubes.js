@@ -1,24 +1,6 @@
 import * as THREE from "three";
-
-const PALETTE_SETS = [
-  [0x4fd8ff, 0x5b7fff, 0x7c5cff, 0x9b5cf0],
-  [0xff4d4d, 0xff8c42, 0xffc94d],
-  [0xff4fd8, 0xd84fff, 0x4fe8ff],
-  [0x8ba888, 0xd9c17c, 0xd98e6b, 0xa8785a],
-];
-
-function toColorArray(hexes) {
-  return hexes.map((c) => new THREE.Color(c));
-}
-
-let paletteIndex = Math.floor(Math.random() * PALETTE_SETS.length);
-let PALETTE = toColorArray(PALETTE_SETS[paletteIndex]);
-const BLACK = new THREE.Color(0x000000);
-
-const PALETTE_SWAP_INTERVAL = 30; // seconds between full-palette swaps
-const PALETTE_GLITCH_DURATION = 0.16; // chaotic strobe duration during a swap
-let nextPaletteSwapAt = PALETTE_SWAP_INTERVAL;
-let paletteGlitchUntil = -Infinity;
+import { smoothstep, easeInOutQuint } from "./utils.js";
+import { createPaletteCycler, BLACK, sampleCyclingColor } from "./palette.js";
 
 const GRID_Y = -5;
 const GRID_Z_OFFSET = -40; // push the whole field behind the camera's frustum start
@@ -39,14 +21,6 @@ const FLICKER_MIN_INTERVAL = 4; // seconds between a cube's flicker events
 const FLICKER_MAX_INTERVAL = 60;
 const FLICKER_DURATION = 0.15; // how long the strobe itself lasts
 
-function smoothstep(t) {
-  return t * t * (3 - 2 * t);
-}
-
-function easeInOutQuint(t) {
-  return t < 0.5 ? 16 * t ** 5 : 1 - Math.pow(-2 * t + 2, 5) / 2;
-}
-
 const CUBE_SCALE = 1.2;
 
 export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
@@ -59,6 +33,7 @@ export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
   const tmpColor = new THREE.Color();
   const flightPos = new THREE.Vector3();
   const instances = [];
+  const paletteCycler = createPaletteCycler();
 
   const cols = gridCols;
   const rows = gridRows;
@@ -103,9 +78,9 @@ export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
       tumbleAxis,
       driftPhase: Math.random() * Math.PI * 2,
       driftSpeed: 0.15 + Math.random() * 0.25,
-      colorPhase: Math.random() * PALETTE.length,
+      colorPhase: Math.random() * paletteCycler.palette.length,
       colorSpeed: 0.04 + Math.random() * 0.08,
-      throwDuration: 1.5 + Math.random() * 0.5,
+      throwDuration: 3.0 + Math.random() * 0.5,
       igniteJitter: (Math.random() - 0.5) * IGNITE_JITTER,
       nextFlickerAt:
         FLICKER_MIN_INTERVAL +
@@ -121,17 +96,8 @@ export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
   mesh.instanceMatrix.needsUpdate = true;
 
   function update(elapsed) {
-    if (elapsed >= nextPaletteSwapAt) {
-      let nextIndex = Math.floor(Math.random() * PALETTE_SETS.length);
-      if (PALETTE_SETS.length > 1 && nextIndex === paletteIndex) {
-        nextIndex = (nextIndex + 1) % PALETTE_SETS.length;
-      }
-      paletteIndex = nextIndex;
-      PALETTE = toColorArray(PALETTE_SETS[paletteIndex]);
-      paletteGlitchUntil = elapsed + PALETTE_GLITCH_DURATION;
-      nextPaletteSwapAt = elapsed + PALETTE_SWAP_INTERVAL;
-    }
-    const inPaletteGlitch = elapsed < paletteGlitchUntil;
+    const inPaletteGlitch = paletteCycler.update(elapsed);
+    const palette = paletteCycler.palette;
 
     for (let i = 0; i < count; i++) {
       const inst = instances[i];
@@ -190,7 +156,7 @@ export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
       const igniteProgress = smoothstep(igniteT);
 
       if (igniteProgress >= 1 && elapsed >= inst.nextFlickerAt) {
-        inst.colorPhase = Math.random() * PALETTE.length;
+        inst.colorPhase = Math.random() * palette.length;
         inst.flickerUntil = elapsed + FLICKER_DURATION;
         inst.nextFlickerAt =
           elapsed +
@@ -199,10 +165,7 @@ export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
       }
 
       const t = elapsed * inst.colorSpeed + inst.colorPhase;
-      const i0 = Math.floor(t) % PALETTE.length;
-      const i1 = (i0 + 1) % PALETTE.length;
-      const frac = t - Math.floor(t);
-      tmpColor.lerpColors(PALETTE[i0], PALETTE[i1], frac);
+      sampleCyclingColor(palette, t, tmpColor);
       tmpColor.lerpColors(BLACK, tmpColor, igniteProgress);
 
       if (elapsed < inst.flickerUntil) {
