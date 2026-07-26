@@ -5,6 +5,7 @@ import { PixelShiftGlitchPass } from "./pixelShiftGlitchPass.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { createCubeField } from "./cubes.js";
 import { createGeoSphereField } from "./geoSphere.js";
+import { createFluidField } from "./fluidField.js";
 
 const prefersReducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)"
@@ -12,12 +13,16 @@ const prefersReducedMotion = window.matchMedia(
 
 const SCENE_SWAP_FADE_MS = 400; // must match #scene-fade-overlay's CSS transition duration
 
-// Each factory returns { mesh: Object3D, update(elapsed) }. Listed here so
-// adding a third scene is just one more entry — background.js and the
+const DEFAULT_BLOOM = { strength: 1.5, radius: 0.6, threshold: 0.0 };
+
+// Each factory returns { mesh: Object3D, update(elapsed), bloom? }. `bloom`
+// is optional — scenes that don't set it just get DEFAULT_BLOOM. Listed
+// here so adding a scene is just one more entry — background.js and the
 // scene-picker UI both stay generic instead of hardcoding scene names.
 export const SCENES = [
   { id: "cubes", factory: createCubeField },
   { id: "network", factory: createGeoSphereField },
+  { id: "fluid", factory: createFluidField },
 ];
 
 function disposeObject3D(object) {
@@ -69,6 +74,23 @@ export function createBackground(canvas) {
   let pendingSceneId = null; // redirected mid-fade clicks just overwrite this
   let fadeTimeoutId = null;
 
+  const renderTarget = new THREE.WebGLRenderTarget(
+    window.innerWidth,
+    window.innerHeight,
+    { samples: 4 }
+  );
+  const composer = new EffectComposer(renderer, renderTarget);
+  composer.addPass(new RenderPass(scene, camera));
+  const glitchPass = new PixelShiftGlitchPass();
+  composer.addPass(glitchPass);
+  const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    DEFAULT_BLOOM.strength,
+    DEFAULT_BLOOM.radius,
+    DEFAULT_BLOOM.threshold
+  );
+  composer.addPass(bloomPass);
+
   function loadScene(sceneId) {
     const entry = SCENES.find((s) => s.id === sceneId) ?? SCENES[0];
 
@@ -77,12 +99,17 @@ export function createBackground(canvas) {
       disposeObject3D(currentMesh);
     }
 
-    const { mesh, update } = entry.factory();
+    const { mesh, update, bloom } = entry.factory();
     sceneGroup.add(mesh);
     currentMesh = mesh;
     updateField = update;
     activeSceneId = entry.id;
     sceneStartTime = clock.getElapsedTime();
+
+    const { strength, radius, threshold } = { ...DEFAULT_BLOOM, ...bloom };
+    bloomPass.strength = strength;
+    bloomPass.radius = radius;
+    bloomPass.threshold = threshold;
 
     // reset accumulated parallax tilt so the new scene starts flat
     sceneGroup.rotation.set(0, 0, 0);
@@ -127,23 +154,6 @@ export function createBackground(canvas) {
   }
 
   loadScene(SCENES[Math.floor(Math.random() * SCENES.length)].id);
-
-  const renderTarget = new THREE.WebGLRenderTarget(
-    window.innerWidth,
-    window.innerHeight,
-    { samples: 4 }
-  );
-  const composer = new EffectComposer(renderer, renderTarget);
-  composer.addPass(new RenderPass(scene, camera));
-  const glitchPass = new PixelShiftGlitchPass();
-  composer.addPass(glitchPass);
-  const bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
-    1.5, // strength
-    0.6, // radius
-    0.0 // threshold
-  );
-  composer.addPass(bloomPass);
 
   // ---- Parallax: pointer / device orientation drive a target tilt,
   // scroll position drives a slow rotation + camera drift ----
