@@ -2,9 +2,10 @@ import * as THREE from "three";
 
 export const PALETTE_SETS = [
   [0x4fd8ff, 0x5b7fff, 0x7c5cff, 0x9b5cf0],
-  [0xff4d4d, 0xff7b42, 0xffa94d],
-  [0xff4fd8, 0xd84fff, 0x4fe8ff],
-  [0x8ba888, 0xd9c17c, 0xd98e6b, 0xa8785a],
+  [0xe0201a, 0xffb14d],
+  [0xff4fd8, 0x4fe8ff],
+  [0x36e0c9, 0xff8a3d],
+  [0x19ff3a, 0xe6ff39],
 ];
 
 export const BLACK = new THREE.Color(0x000000);
@@ -17,7 +18,7 @@ function toColorArray(hexes) {
 // between its colors over time, and every `swapInterval` seconds jumps to a
 // different palette with a brief chaotic glitch-strobe at the transition.
 export function createPaletteCycler({
-  swapInterval = 30,
+  swapInterval = 4,
   glitchDuration = 0.16,
 } = {}) {
   let paletteIndex = Math.floor(Math.random() * PALETTE_SETS.length);
