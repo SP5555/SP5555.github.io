@@ -23,6 +23,16 @@ const FLICKER_DURATION = 0.15; // how long the strobe itself lasts
 
 const CUBE_SCALE = 1.2;
 
+// ---- Breathing wave: a dim-to-black brightness ripple that periodically
+// expands outward from roughly where the camera sits, through the whole field ----
+const BREATHE_INTERVAL_MIN = 6; // seconds between waves
+const BREATHE_INTERVAL_MAX = 16;
+const BREATHE_FIRST_DELAY = 8; // don't start until the boot sequence has settled
+const BREATHE_SWEEP_DURATION = 0.8; // time for the ripple to reach the farthest cube
+const BREATHE_PULSE_WIDTH = 0.6; // how long each cube's own bump lasts as the wave passes
+const BREATHE_DARKNESS = 0.4; // 0.0 = breathe to full black, 1.0 = breathe without changing color
+const CAMERA_APPROX = new THREE.Vector3(0, 0, 9); // matches background.js's camera.position
+
 export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
   const count = gridCols * gridRows;
   const geometry = new THREE.BoxGeometry(0.4, 0.4, 0.4);
@@ -35,11 +45,17 @@ export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
   const instances = [];
   const paletteCycler = createPaletteCycler();
 
+  let nextBreatheAt =
+    BREATHE_FIRST_DELAY +
+    Math.random() * (BREATHE_INTERVAL_MAX - BREATHE_INTERVAL_MIN);
+  let breatheStartTime = null;
+
   const cols = gridCols;
   const rows = gridRows;
   const spacing = GRID_SPACING;
 
   let maxDist = 1;
+  let maxCameraDist = 1;
 
   for (let i = 0; i < count; i++) {
     const col = i % cols;
@@ -59,6 +75,9 @@ export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
     const dist = Math.abs(gridPos.x);
     if (dist > maxDist) maxDist = dist;
 
+    const cameraDist = restPosition.distanceTo(CAMERA_APPROX);
+    if (cameraDist > maxCameraDist) maxCameraDist = cameraDist;
+
     const rotationSpeed = new THREE.Vector3(
       (Math.random() - 0.5) * 0.4,
       (Math.random() - 0.5) * 0.4,
@@ -74,6 +93,7 @@ export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
       gridPos,
       restPosition,
       dist,
+      cameraDist,
       rotationSpeed,
       tumbleAxis,
       driftPhase: Math.random() * Math.PI * 2,
@@ -99,9 +119,29 @@ export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
     const inPaletteGlitch = paletteCycler.update(elapsed);
     const palette = paletteCycler.palette;
 
+    if (elapsed >= nextBreatheAt) {
+      breatheStartTime = elapsed;
+      nextBreatheAt =
+        elapsed +
+        BREATHE_INTERVAL_MIN +
+        Math.random() * (BREATHE_INTERVAL_MAX - BREATHE_INTERVAL_MIN);
+    }
+
     for (let i = 0; i < count; i++) {
       const inst = instances[i];
       const distRatio = inst.dist / maxDist;
+
+      let breatheBump = 0;
+      if (breatheStartTime !== null) {
+        const arrivalTime =
+          breatheStartTime +
+          (inst.cameraDist / maxCameraDist) * BREATHE_SWEEP_DURATION;
+        const bumpT = Math.min(
+          Math.max((elapsed - arrivalTime) / BREATHE_PULSE_WIDTH, 0),
+          1
+        );
+        breatheBump = Math.sin(Math.PI * bumpT) ** 2;
+      }
 
       const igniteStart = HOLD + distRatio * WAVE_SWEEP + inst.igniteJitter;
       const throwStart = THROW_PHASE_START + distRatio * THROW_STAGGER;
@@ -175,6 +215,8 @@ export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
       if (inPaletteGlitch) {
         tmpColor.multiplyScalar(Math.random() < 0.5 ? 0.1 : 2.2);
       }
+
+      tmpColor.lerpColors(tmpColor, BLACK, breatheBump * (1 - BREATHE_DARKNESS));
 
       mesh.setColorAt(i, tmpColor);
     }

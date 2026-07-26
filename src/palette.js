@@ -18,7 +18,7 @@ function toColorArray(hexes) {
 // between its colors over time, and every `swapInterval` seconds jumps to a
 // different palette with a brief chaotic glitch-strobe at the transition.
 export function createPaletteCycler({
-  swapInterval = 4,
+  swapInterval = 30,
   glitchDuration = 0.16,
 } = {}) {
   let paletteIndex = Math.floor(Math.random() * PALETTE_SETS.length);

@@ -36,15 +36,15 @@ const EDGE_FLASH_BOOST = 20.0; // extra brightness overshoot as each edge-slot i
 
 // ---- Wormhole pulses: rare straight-line links cutting through the
 // sphere's interior between two far-apart random nodes ----
-const WORMHOLE_COUNT = 4; // how many can be active/traveling at once
-const WORMHOLE_MIN_INTERVAL = 4; // seconds between a slot's own trigger events
-const WORMHOLE_MAX_INTERVAL = 10;
-const WORMHOLE_SPEED_MIN = 0.8; // fraction of the link crossed per second
-const WORMHOLE_SPEED_MAX = 1.2;
-const WORMHOLE_GLOW_WIDTH = 1.2; // width (in link-parametric units) of the glow peak
+const WORMHOLE_COUNT = 2; // how many can be active/traveling at once
+const WORMHOLE_MIN_INTERVAL = 2; // seconds between a slot's own trigger events
+const WORMHOLE_MAX_INTERVAL = 4;
+const WORMHOLE_SPEED_MIN = 0.5; // fraction of the link crossed per second
+const WORMHOLE_SPEED_MAX = 2.0;
+const WORMHOLE_GLOW_WIDTH = 1.0; // width (in link-parametric units) of the glow peak
 const WORMHOLE_RANGE_PAD = WORMHOLE_GLOW_WIDTH * 2.2; // same fade-in/out-past-the-ends trick as the roaming pulses
-const WORMHOLE_BRIGHTNESS = 3.2;
-const WORMHOLE_MIN_DISTANCE = RADIUS * 1.3; // require a genuinely long, cross-sphere link
+const WORMHOLE_BRIGHTNESS = 8.0;
+const WORMHOLE_MIN_DISTANCE = RADIUS * 1.4; // require a genuinely long, cross-sphere link
 const WORMHOLE_MAX_ATTEMPTS = 12; // random-sampling tries before settling for the farthest pair found
 
 export function createGeoSphereField() {
