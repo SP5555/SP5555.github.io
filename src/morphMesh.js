@@ -18,7 +18,7 @@ import { createPaletteCycler, sampleCyclingColor, BLACK } from "./palette.js";
 // there's no seam mismatch or desync between them. ----
 
 const RADIUS = 10;
-const DETAIL = 20; // icosphere subdivision level — higher = more facets, more expensive
+const DETAIL = 16; // icosphere subdivision level — higher = more facets, more expensive
 const GROUP_Z_OFFSET = -8;
 
 const FACET_FILL = 0.96; // outer shell: 1.0 = seamless, <1 = gaps the inner core glows through
@@ -27,7 +27,7 @@ const FACET_FILL = 0.96; // outer shell: 1.0 = seamless, <1 = gaps the inner cor
 // *at that same vertex, that same frame* — since it's a straight multiple
 // of an always-positive value, it can never exceed the outer shell,
 // no matter how the other constants get tuned
-const INNER_RADIUS_RATIO = 0.994;
+const INNER_RADIUS_RATIO = 0.998;
 const OUTER_BRIGHTNESS = 0.18; // dim, glint-only self-lit look for the outer shell (no patch glow)
 
 // spatial frequency of the morphing noise wanders between these bounds

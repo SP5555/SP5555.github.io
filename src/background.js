@@ -171,6 +171,10 @@ export function createBackground(canvas) {
 
   if (!prefersReducedMotion) {
     window.addEventListener("pointermove", (e) => {
+      // touch input also fires pointermove — ignore it so a finger drag
+      // doesn't fight with deviceorientation for the same target values
+      if (e.pointerType && e.pointerType !== "mouse") return;
+
       const nx = (e.clientX / window.innerWidth) * 2 - 1;
       const ny = (e.clientY / window.innerHeight) * 2 - 1;
       target.rotY = nx * PARALLAX_MAX_ROT_Y;
