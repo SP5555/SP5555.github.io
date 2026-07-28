@@ -3,23 +3,32 @@ import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
 import { smoothstep } from "./utils.js";
 import { createPaletteCycler, sampleCyclingColor, BLACK } from "./palette.js";
 
-// ---- A morphing, faceted gem: an icosphere whose vertices bulge in and
-// out over time via 3D noise, rendered as individual triangle facets.
-// Brightness is fully decoupled from that morph — instead, independent
-// Gaussian glow patches spawn on random facets and spread outward by
-// graph distance across the mesh's actual triangle topology (real dark
-// troughs, bright glowing peaks — the same "give bloom something dark to
-// contrast against" lesson learned from the fluid scene), plus a
-// light-catching glint as the whole gem slowly rotates. FACET_FILL
-// controls whether facets sit flush against each other (seamless) or
-// pull apart into a faceted mosaic (gaps) — same displaced vertex data
-// either way, so there's no seam mismatch when FACET_FILL is 1.0. ----
+// ---- A morphing, faceted gem, built from two nested layers of the same
+// icosphere topology, sharing one noise field so they bulge in sync:
+//   - Outer shell: FACET_FILL < 1 leaves gaps between facets, and it only
+//     carries a dim, glint-driven self-lit look — no patch glow of its
+//     own.
+//   - Inner core: a smaller radius, always fully seamless, sitting
+//     completely black except where a Gaussian glow patch (spawned on a
+//     random facet, spreading outward by graph distance across the
+//     mesh's real triangle adjacency) lights it up.
+// The inner glow is only ever visible through the outer shell's gaps —
+// light "leaking through cracks" rather than the surface glowing
+// directly. Both layers reuse the exact same per-vertex bulge value, so
+// there's no seam mismatch or desync between them. ----
 
 const RADIUS = 10;
 const DETAIL = 20; // icosphere subdivision level — higher = more facets, more expensive
 const GROUP_Z_OFFSET = -8;
 
-const FACET_FILL = 0.96; // 1.0 = seamless surface, <1 = gaps between facets (try ~0.85)
+const FACET_FILL = 0.96; // outer shell: 1.0 = seamless, <1 = gaps the inner core glows through
+
+// inner core's radius is always this fraction of the outer shell's radius
+// *at that same vertex, that same frame* — since it's a straight multiple
+// of an always-positive value, it can never exceed the outer shell,
+// no matter how the other constants get tuned
+const INNER_RADIUS_RATIO = 0.994;
+const OUTER_BRIGHTNESS = 0.18; // dim, glint-only self-lit look for the outer shell (no patch glow)
 
 // spatial frequency of the morphing noise wanders between these bounds
 // over time instead of sitting at one fixed value — see createValueWanderer
@@ -30,10 +39,21 @@ const NOISE_FREQ_INTERVAL_MAX = 10;
 const NOISE_FREQ_TRANSITION = 4; // seconds to ease from one target to the next
 
 const TIME_SPEED = 0.12; // how fast the surface morphs over time
-const DISPLACEMENT_AMPLITUDE = 1.0; // how far vertices bulge in/out
+const DISPLACEMENT_AMPLITUDE = 0.8; // how far vertices bulge in/out
 
-const GLOW_FLOOR = 0.2; // baseline brightness so the form stays visible between pulse visits
-const GLOW_MAX = 1.0; // hard cap on total glow, in case several pulse trails overlap
+const GLOW_FLOOR = 0.0; // inner core's rest brightness — 0 keeps it genuinely black between patches
+const GLOW_MAX = 1.6; // hard cap on the inner core's total glow, in case several patches overlap
+
+// ---- Global breathe: same idea as the cube scene's breathing wave — on a
+// random interval, the whole inner core flashes together once, adding onto
+// whatever the patches are doing but still capped by GLOW_MAX overall ----
+const BREATHE_INTERVAL_MIN = 4; // seconds between global flashes
+const BREATHE_INTERVAL_MAX = 10;
+const BREATHE_FIRST_DELAY = 2; // don't start until the boot ignite has settled
+const BREATHE_DURATION = 2.6; // total time from flash start to fully faded out
+const BREATHE_ATTACK = 0.2; // seconds to ramp up to peak brightness
+const BREATHE_BRIGHTNESS = 1.0; // extra glow at the flash's peak
+const GLOW_FACET_SHRINK = 0.2; // how much a facet's own FACET_FILL shrinks (gap widens) at max local glow — reacts to patches and the global breathe alike, since both feed the same glow value
 
 // ---- Glow patches: independent Gaussian "blooms" of light, each centered
 // on a random facet and spreading over its neighbors by graph distance
@@ -42,20 +62,21 @@ const GLOW_MAX = 1.0; // hard cap on total glow, in case several pulse trails ov
 // after a random wait respawns at a new random facet. Glow is driven
 // entirely by these — not by the morph displacement — so shape and
 // brightness read as two decoupled things. ----
-const PATCH_COUNT = 80; // how many patches are alive/waiting at once
-const PATCH_SIZE_MIN = 3; // gaussian sigma, in hop-distance (~triangles) across the surface
+const PATCH_COUNT = 60; // how many patches are alive/waiting at once
+const PATCH_SIZE_MIN = 1; // gaussian sigma, in hop-distance (~triangles) across the surface
 const PATCH_SIZE_MAX = 6;
-const PATCH_DURATION_MIN = 1.0; // seconds a patch stays alive (light-up + fade out)
+const PATCH_DURATION_MIN = 2.0; // seconds a patch stays alive (light-up + fade out)
 const PATCH_DURATION_MAX = 6.0;
 const PATCH_ATTACK_MIN = 0.1; // seconds to ramp up to peak brightness at spawn
 const PATCH_ATTACK_MAX = 0.2;
-const PATCH_WAIT_MIN = 1.0; // gap after a patch dies before that slot spawns a new one
-const PATCH_WAIT_MAX = 2.0;
-const PATCH_BRIGHTNESS = 0.6; // peak brightness at a patch's center
+const PATCH_WAIT_MIN = 0.0; // gap after a patch dies before that slot spawns a new one
+const PATCH_WAIT_MAX = 1.0;
+const PATCH_BRIGHTNESS = 1.6; // peak brightness at a patch's center
 const PATCH_SIGMA_CUTOFF = 2.6; // truncate the gaussian tail past this many sigmas (perf, not visual)
 
 const GLINT_SHARPNESS = 6; // higher = narrower, snappier glint highlights
-const GLINT_MIN = 0.25; // baseline light-catching multiplier even off-angle
+const GLINT_MIN = 0.1; // baseline light-catching multiplier even off-angle
+const GLINT_MAX = 0.4; // multiplier at a perfectly-aligned facet — below 1 so even the best angle isn't full brightness
 const LIGHT_DIR = new THREE.Vector3(0.4, 0.6, 1).normalize();
 
 const COLOR_SPEED_MIN = 0.01;
@@ -235,26 +256,52 @@ export function createMorphMesh() {
   }
 
   // scratch buffers, recomputed once per unique vertex each frame (not
-  // once per face-corner) — that's what keeps shared edges in sync
+  // once per face-corner) — that's what keeps shared edges in sync.
+  // Both layers share the same "signed" noise value per vertex (just
+  // applied at two different radii), so they bulge in perfect sync.
   const dispSigned = new Float32Array(vertexCount);
   const dispX = new Float32Array(vertexCount);
   const dispY = new Float32Array(vertexCount);
   const dispZ = new Float32Array(vertexCount);
+  const innerX = new Float32Array(vertexCount);
+  const innerY = new Float32Array(vertexCount);
+  const innerZ = new Float32Array(vertexCount);
 
   const positions = new Float32Array(faceCount * 9);
   const colors = new Float32Array(faceCount * 9);
-  const renderGeometry = new THREE.BufferGeometry();
-  renderGeometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  renderGeometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  const posAttr = renderGeometry.getAttribute("position");
-  const colorAttr = renderGeometry.getAttribute("color");
+  const outerGeometry = new THREE.BufferGeometry();
+  outerGeometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  outerGeometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  const posAttr = outerGeometry.getAttribute("position");
+  const colorAttr = outerGeometry.getAttribute("color");
 
-  const material = new THREE.MeshBasicMaterial({
+  const outerMaterial = new THREE.MeshBasicMaterial({
     vertexColors: true,
     side: THREE.DoubleSide,
   });
-  const mesh = new THREE.Mesh(renderGeometry, material);
-  mesh.position.z = GROUP_Z_OFFSET;
+  const outerMesh = new THREE.Mesh(outerGeometry, outerMaterial);
+
+  const innerPositions = new Float32Array(faceCount * 9);
+  const innerColors = new Float32Array(faceCount * 9);
+  const innerGeometry = new THREE.BufferGeometry();
+  innerGeometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(innerPositions, 3)
+  );
+  innerGeometry.setAttribute("color", new THREE.BufferAttribute(innerColors, 3));
+  const innerPosAttr = innerGeometry.getAttribute("position");
+  const innerColorAttr = innerGeometry.getAttribute("color");
+
+  const innerMaterial = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    side: THREE.DoubleSide,
+  });
+  const innerMesh = new THREE.Mesh(innerGeometry, innerMaterial);
+
+  const group = new THREE.Group();
+  group.add(outerMesh);
+  group.add(innerMesh);
+  group.position.z = GROUP_Z_OFFSET;
 
   // top-to-bottom ignite wave, timed off each facet's *rest* vertical
   // position (stable even though the surface keeps morphing afterward)
@@ -337,9 +384,39 @@ export function createMorphMesh() {
   });
   const tmpColor = new THREE.Color();
 
+  let nextBreatheAt =
+    BREATHE_FIRST_DELAY +
+    Math.random() * (BREATHE_INTERVAL_MAX - BREATHE_INTERVAL_MIN);
+  let breatheStartTime = null;
+
   function update(elapsed) {
     const inPaletteGlitch = paletteCycler.update(elapsed);
     const palette = paletteCycler.palette;
+
+    if (elapsed >= nextBreatheAt) {
+      breatheStartTime = elapsed;
+      nextBreatheAt =
+        elapsed +
+        BREATHE_INTERVAL_MIN +
+        Math.random() * (BREATHE_INTERVAL_MAX - BREATHE_INTERVAL_MIN);
+    }
+    let breatheEnvelope = 0;
+    if (breatheStartTime !== null) {
+      const sinceBreathe = elapsed - breatheStartTime;
+      if (sinceBreathe < BREATHE_ATTACK) {
+        breatheEnvelope = smoothstep(sinceBreathe / BREATHE_ATTACK);
+      } else {
+        const decayT = Math.min(
+          Math.max(
+            (sinceBreathe - BREATHE_ATTACK) / (BREATHE_DURATION - BREATHE_ATTACK),
+            0
+          ),
+          1
+        );
+        breatheEnvelope = 1 - smoothstep(decayT);
+      }
+    }
+    const breatheGlow = breatheEnvelope * BREATHE_BRIGHTNESS;
 
     glowAccum.fill(0);
     for (let p = 0; p < PATCH_COUNT; p++) {
@@ -399,6 +476,11 @@ export function createMorphMesh() {
       dispX[i] = dx * r;
       dispY[i] = dy * r;
       dispZ[i] = dz * r;
+
+      const rInner = r * INNER_RADIUS_RATIO;
+      innerX[i] = dx * rInner;
+      innerY[i] = dy * rInner;
+      innerZ[i] = dz * rInner;
     }
 
     for (let f = 0; f < faceCount; f++) {
@@ -417,10 +499,19 @@ export function createMorphMesh() {
       );
       const igniteProgress = smoothstep(igniteT);
 
+      // this facet's own inner-core glow (patches + global breathe,
+      // already capped) — computed here so it can drive the gap widening
+      // below, and reused later for the inner core's own color
+      const localGlow = Math.min(glowAccum[f] + breatheGlow, GLOW_MAX - GLOW_FLOOR);
+      const glowT = localGlow / (GLOW_MAX - GLOW_FLOOR || 1);
+
       // scale-pop: each facet starts collapsed to a single point (its own
       // centroid) and grows to its full size as it ignites, reusing the
-      // same centroid-shrink math FACET_FILL already relies on
-      const liveFill = FACET_FILL * igniteProgress;
+      // same centroid-shrink math FACET_FILL already relies on. Also
+      // shrinks in proportion to this facet's own glow — the gap widens
+      // right where the light underneath is brightest.
+      const dynamicFacetFill = FACET_FILL - glowT * GLOW_FACET_SHRINK;
+      const liveFill = dynamicFacetFill * igniteProgress;
 
       const cx = (x0 + x1 + x2) / 3;
       const cy = (y0 + y1 + y2) / 3;
@@ -462,11 +553,14 @@ export function createMorphMesh() {
       );
       const glint = Math.pow(glintDot, GLINT_SHARPNESS);
 
-      const glow = GLOW_FLOOR + Math.min(glowAccum[f], GLOW_MAX - GLOW_FLOOR);
-      const brightness = glow * (GLINT_MIN + glint * (1 - GLINT_MIN));
+      // outer shell: dim, glint-driven self-lit look only — no patch glow
+      // here, so the only bright light comes from the inner core showing
+      // through its gaps
+      const outerBrightness =
+        OUTER_BRIGHTNESS * (GLINT_MIN + glint * (GLINT_MAX - GLINT_MIN));
       const t = elapsed * meta.colorSpeed + meta.colorPhase;
       sampleCyclingColor(palette, t, tmpColor);
-      tmpColor.multiplyScalar(brightness);
+      tmpColor.multiplyScalar(outerBrightness);
       tmpColor.lerpColors(BLACK, tmpColor, igniteProgress);
 
       if (inPaletteGlitch) {
@@ -482,16 +576,68 @@ export function createMorphMesh() {
       colors[base + 6] = tmpColor.r;
       colors[base + 7] = tmpColor.g;
       colors[base + 8] = tmpColor.b;
+
+      // inner core: always seamless (only the ignite scale-pop shrinks it,
+      // never a resting gap), sitting black except where a glow patch
+      // lights it up — that light only reads through the outer shell's gaps
+      const ix0 = innerX[i0], iy0 = innerY[i0], iz0 = innerZ[i0];
+      const ix1 = innerX[i1], iy1 = innerY[i1], iz1 = innerZ[i1];
+      const ix2 = innerX[i2], iy2 = innerY[i2], iz2 = innerZ[i2];
+
+      const icx = (ix0 + ix1 + ix2) / 3;
+      const icy = (iy0 + iy1 + iy2) / 3;
+      const icz = (iz0 + iz1 + iz2) / 3;
+
+      const isx0 = icx + (ix0 - icx) * igniteProgress;
+      const isy0 = icy + (iy0 - icy) * igniteProgress;
+      const isz0 = icz + (iz0 - icz) * igniteProgress;
+      const isx1 = icx + (ix1 - icx) * igniteProgress;
+      const isy1 = icy + (iy1 - icy) * igniteProgress;
+      const isz1 = icz + (iz1 - icz) * igniteProgress;
+      const isx2 = icx + (ix2 - icx) * igniteProgress;
+      const isy2 = icy + (iy2 - icy) * igniteProgress;
+      const isz2 = icz + (iz2 - icz) * igniteProgress;
+
+      innerPositions[base] = isx0;
+      innerPositions[base + 1] = isy0;
+      innerPositions[base + 2] = isz0;
+      innerPositions[base + 3] = isx1;
+      innerPositions[base + 4] = isy1;
+      innerPositions[base + 5] = isz1;
+      innerPositions[base + 6] = isx2;
+      innerPositions[base + 7] = isy2;
+      innerPositions[base + 8] = isz2;
+
+      const innerGlow = GLOW_FLOOR + localGlow;
+      sampleCyclingColor(palette, t, tmpColor);
+      tmpColor.multiplyScalar(innerGlow);
+      tmpColor.lerpColors(BLACK, tmpColor, igniteProgress);
+
+      if (inPaletteGlitch) {
+        tmpColor.multiplyScalar(Math.random() < 0.5 ? 0.1 : 2.2);
+      }
+
+      innerColors[base] = tmpColor.r;
+      innerColors[base + 1] = tmpColor.g;
+      innerColors[base + 2] = tmpColor.b;
+      innerColors[base + 3] = tmpColor.r;
+      innerColors[base + 4] = tmpColor.g;
+      innerColors[base + 5] = tmpColor.b;
+      innerColors[base + 6] = tmpColor.r;
+      innerColors[base + 7] = tmpColor.g;
+      innerColors[base + 8] = tmpColor.b;
     }
 
     posAttr.needsUpdate = true;
     colorAttr.needsUpdate = true;
+    innerPosAttr.needsUpdate = true;
+    innerColorAttr.needsUpdate = true;
 
-    mesh.rotation.y = elapsed * ROTATE_SPEED_Y;
-    mesh.rotation.x = Math.sin(elapsed * ROTATE_SPEED_X) * ROTATE_WOBBLE;
+    group.rotation.y = elapsed * ROTATE_SPEED_Y;
+    group.rotation.x = Math.sin(elapsed * ROTATE_SPEED_X) * ROTATE_WOBBLE;
 
     return inPaletteGlitch;
   }
 
-  return { mesh, update };
+  return { mesh: group, update };
 }
