@@ -15,15 +15,24 @@ function toColorArray(hexes) {
 }
 
 // Independent per-instance cycler: picks a random palette, blends smoothly
-// between its colors over time, and every `swapInterval` seconds jumps to a
-// different palette with a brief chaotic glitch-strobe at the transition.
+// between its colors over time, and every 'swapIntervalMin'-'swapIntervalMax'
+// seconds (randomized per swap, not a fixed cadence) jumps to a different
+// palette with a brief chaotic glitch-strobe at the transition.
 export function createPaletteCycler({
-  swapInterval = 30,
+  swapIntervalMin = 2,
+  swapIntervalMax = 30,
   glitchDuration = 0.16,
 } = {}) {
   let paletteIndex = Math.floor(Math.random() * PALETTE_SETS.length);
   let palette = toColorArray(PALETTE_SETS[paletteIndex]);
-  let nextSwapAt = swapInterval;
+
+  function pickNextInterval() {
+    return (
+      swapIntervalMin + Math.random() * (swapIntervalMax - swapIntervalMin)
+    );
+  }
+
+  let nextSwapAt = pickNextInterval();
   let glitchUntil = -Infinity;
 
   function update(elapsed) {
@@ -35,7 +44,7 @@ export function createPaletteCycler({
       paletteIndex = nextIndex;
       palette = toColorArray(PALETTE_SETS[paletteIndex]);
       glitchUntil = elapsed + glitchDuration;
-      nextSwapAt = elapsed + swapInterval;
+      nextSwapAt = elapsed + pickNextInterval();
     }
     return elapsed < glitchUntil; // true while the transition glitch is active
   }

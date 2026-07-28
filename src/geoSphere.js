@@ -33,6 +33,7 @@ const EDGE_TRAVEL_DURATION = 0.4; // time for the light to travel end-to-end alo
 const PULSE_SPAWN_STAGGER = 3.2; // spread of pulse spawn times after the edges finish
 const EDGE_JITTER = 0.4; // tiny per-edge randomness on top of the edge sweep
 const EDGE_FLASH_BOOST = 20.0; // extra brightness overshoot as each edge-slot ignites (the "startup pulse")
+const EDGE_RESTING_OPACITY = 0.05; // shared by the resting edge material and the pulse's own floor color
 
 // ---- Wormhole pulses: rare straight-line links cutting through the
 // sphere's interior between two far-apart random nodes ----
@@ -53,6 +54,7 @@ export function createGeoSphereField() {
   group.position.z = GROUP_Z_OFFSET;
   const paletteCycler = createPaletteCycler();
   const tmpColor = new THREE.Color();
+  const tmpFloor = new THREE.Color();
 
   const minY = Math.min(...vertices.map((v) => v.y));
   const maxY = Math.max(...vertices.map((v) => v.y));
@@ -142,7 +144,7 @@ export function createGeoSphereField() {
   const edgeMaterial = new THREE.LineBasicMaterial({
     vertexColors: true,
     transparent: true,
-    opacity: 0.05,
+    opacity: EDGE_RESTING_OPACITY,
   });
   const edgeLines = new THREE.LineSegments(edgeGeometry, edgeMaterial);
   group.add(edgeLines);
@@ -182,6 +184,11 @@ export function createGeoSphereField() {
     speed:
       PULSE_SPEED_MIN + Math.random() * (PULSE_SPEED_MAX - PULSE_SPEED_MIN),
   }));
+
+  // which edges currently have a live pulse traveling on them — the
+  // resting edge underneath gets hidden for those, so it doesn't z-fight
+  // (flicker) with the pulse's own coincident line geometry
+  const edgeOccupiedByPulse = new Uint8Array(edges.length);
 
   // ---- Wormhole pulses: a small fixed pool, reused rather than truly
   // created/destroyed each time — a slot goes active, animates once across
@@ -298,15 +305,32 @@ export function createGeoSphereField() {
     nodeMesh.instanceMatrix.needsUpdate = true;
     nodeMesh.instanceColor.needsUpdate = true;
 
+    // mark every edge a pulse currently occupies, before drawing the
+    // resting edges — those get hidden below instead of coinciding with
+    // the pulse's own geometry. Marked regardless of spawned state: the
+    // pulse's trail sits on this edge (now rendering its dim floor color)
+    // from the moment it's assigned, not just once its glow becomes visible
+    edgeOccupiedByPulse.fill(0);
+    for (let i = 0; i < PULSE_COUNT; i++) {
+      edgeOccupiedByPulse[pulseState[i].edgeIndex] = 1;
+    }
+
     // edges — each end takes its color straight from that endpoint's actual
     // current node color, so the GPU's own per-vertex interpolation across
     // the line draws a genuine node-to-node gradient for free
     const colorAttr = edgeGeometry.attributes.color;
     for (let i = 0; i < edges.length; i++) {
       const [a, b] = edges[i];
+      const occupied = edgeOccupiedByPulse[i];
 
       for (let slot = 0; slot < 2; slot++) {
         const idx = i * 2 + slot;
+
+        if (occupied) {
+          colorAttr.setXYZ(idx, 0, 0, 0);
+          continue;
+        }
+
         const igniteT = Math.min(
           Math.max((elapsed - edgeSlotIgniteStart[idx]) / IGNITE_FADE, 0),
           1
@@ -386,17 +410,25 @@ export function createGeoSphereField() {
           ? Math.exp(-(((localT1 - pulse.t) / PULSE_GLOW_WIDTH) ** 2))
           : 0;
 
+        // the resting edge underneath this segment is hidden (see the
+        // occupied-edge check above), so bake its dim appearance in here
+        // as a floor — the pulse geometry alone then reproduces what both
+        // layers used to show together, without the two ever coinciding
+        tmpFloor.lerpColors(nodeColors[a], nodeColors[b], localT0);
+        tmpFloor.multiplyScalar(EDGE_RESTING_OPACITY);
         pulseColorAttr.setXYZ(
           segIndex * 2,
-          tmpColor.r * intensity0,
-          tmpColor.g * intensity0,
-          tmpColor.b * intensity0
+          tmpFloor.r + tmpColor.r * intensity0,
+          tmpFloor.g + tmpColor.g * intensity0,
+          tmpFloor.b + tmpColor.b * intensity0
         );
+        tmpFloor.lerpColors(nodeColors[a], nodeColors[b], localT1);
+        tmpFloor.multiplyScalar(EDGE_RESTING_OPACITY);
         pulseColorAttr.setXYZ(
           segIndex * 2 + 1,
-          tmpColor.r * intensity1,
-          tmpColor.g * intensity1,
-          tmpColor.b * intensity1
+          tmpFloor.r + tmpColor.r * intensity1,
+          tmpFloor.g + tmpColor.g * intensity1,
+          tmpFloor.b + tmpColor.b * intensity1
         );
       }
     }

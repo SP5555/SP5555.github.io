@@ -5,7 +5,7 @@ import { PixelShiftGlitchPass } from "./pixelShiftGlitchPass.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { createCubeField } from "./cubes.js";
 import { createGeoSphereField } from "./geoSphere.js";
-import { createFluidField } from "./fluidField.js";
+import { createMorphMesh } from "./morphMesh.js";
 
 const prefersReducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)"
@@ -15,6 +15,10 @@ const SCENE_SWAP_FADE_MS = 400; // must match #scene-fade-overlay's CSS transiti
 
 const DEFAULT_BLOOM = { strength: 1.5, radius: 0.6, threshold: 0.0 };
 
+// how far pointer/tilt parallax rotates the scene, shared across all scenes
+const PARALLAX_MAX_ROT_Y = 0.03;
+const PARALLAX_MAX_ROT_X = 0.02;
+
 // Each factory returns { mesh: Object3D, update(elapsed), bloom? }. `bloom`
 // is optional — scenes that don't set it just get DEFAULT_BLOOM. Listed
 // here so adding a scene is just one more entry — background.js and the
@@ -22,7 +26,7 @@ const DEFAULT_BLOOM = { strength: 1.5, radius: 0.6, threshold: 0.0 };
 export const SCENES = [
   { id: "cubes", factory: createCubeField },
   { id: "network", factory: createGeoSphereField },
-  { id: "fluid", factory: createFluidField },
+  { id: "morph", factory: createMorphMesh },
 ];
 
 function disposeObject3D(object) {
@@ -164,14 +168,14 @@ export function createBackground(canvas) {
     window.addEventListener("pointermove", (e) => {
       const nx = (e.clientX / window.innerWidth) * 2 - 1;
       const ny = (e.clientY / window.innerHeight) * 2 - 1;
-      target.rotY = nx * 0.12;
-      target.rotX = ny * 0.08;
+      target.rotY = nx * PARALLAX_MAX_ROT_Y;
+      target.rotX = ny * PARALLAX_MAX_ROT_X;
     });
 
     window.addEventListener("deviceorientation", (e) => {
       if (e.beta == null || e.gamma == null) return;
-      target.rotX = THREE.MathUtils.clamp(e.beta / 90, -1, 1) * 0.08;
-      target.rotY = THREE.MathUtils.clamp(e.gamma / 90, -1, 1) * 0.12;
+      target.rotX = THREE.MathUtils.clamp(e.beta / 90, -1, 1) * PARALLAX_MAX_ROT_X;
+      target.rotY = THREE.MathUtils.clamp(e.gamma / 90, -1, 1) * PARALLAX_MAX_ROT_Y;
     });
   }
 

@@ -30,7 +30,7 @@ const BREATHE_INTERVAL_MAX = 16;
 const BREATHE_FIRST_DELAY = 8; // don't start until the boot sequence has settled
 const BREATHE_SWEEP_DURATION = 0.8; // time for the ripple to reach the farthest cube
 const BREATHE_PULSE_WIDTH = 0.6; // how long each cube's own bump lasts as the wave passes
-const BREATHE_DARKNESS = 0.4; // 0.0 = breathe to full black, 1.0 = breathe without changing color
+const BREATHE_DARKNESS = 0.6; // 0.0 = breathe to full black, 1.0 = breathe without changing color
 const CAMERA_APPROX = new THREE.Vector3(0, 0, 9); // matches background.js's camera.position
 
 export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
