@@ -42,7 +42,7 @@ const GLOW_MAX = 1.0; // hard cap on total glow, in case several pulse trails ov
 // after a random wait respawns at a new random facet. Glow is driven
 // entirely by these — not by the morph displacement — so shape and
 // brightness read as two decoupled things. ----
-const PATCH_COUNT = 60; // how many patches are alive/waiting at once
+const PATCH_COUNT = 80; // how many patches are alive/waiting at once
 const PATCH_SIZE_MIN = 3; // gaussian sigma, in hop-distance (~triangles) across the surface
 const PATCH_SIZE_MAX = 6;
 const PATCH_DURATION_MIN = 1.0; // seconds a patch stays alive (light-up + fade out)
@@ -51,7 +51,7 @@ const PATCH_ATTACK_MIN = 0.1; // seconds to ramp up to peak brightness at spawn
 const PATCH_ATTACK_MAX = 0.2;
 const PATCH_WAIT_MIN = 1.0; // gap after a patch dies before that slot spawns a new one
 const PATCH_WAIT_MAX = 2.0;
-const PATCH_BRIGHTNESS = 0.8; // peak brightness at a patch's center
+const PATCH_BRIGHTNESS = 0.6; // peak brightness at a patch's center
 const PATCH_SIGMA_CUTOFF = 2.6; // truncate the gaussian tail past this many sigmas (perf, not visual)
 
 const GLINT_SHARPNESS = 6; // higher = narrower, snappier glint highlights

@@ -5,7 +5,7 @@ export const PALETTE_SETS = [
   [0xe0201a, 0xffb14d],
   [0xff4fd8, 0x4fe8ff],
   [0x36e0c9, 0xff8a3d],
-  [0x19ff3a, 0xe6ff39],
+  [0x19ff3a, 0xf6ff19],
 ];
 
 export const BLACK = new THREE.Color(0x000000);

@@ -13,11 +13,16 @@ const prefersReducedMotion = window.matchMedia(
 
 const SCENE_SWAP_FADE_MS = 400; // must match #scene-fade-overlay's CSS transition duration
 
-const DEFAULT_BLOOM = { strength: 1.5, radius: 0.6, threshold: 0.0 };
+const DEFAULT_BLOOM = { strength: 1.0, radius: 1.0, threshold: 0.0 };
 
 // how far pointer/tilt parallax rotates the scene, shared across all scenes
 const PARALLAX_MAX_ROT_Y = 0.03;
 const PARALLAX_MAX_ROT_X = 0.02;
+
+// shared by all scenes — color should match the background so fog blends to
+// black; density is exponential falloff (higher = fog starts closer in)
+const FOG_COLOR = 0x000000;
+const FOG_DENSITY = 0.03;
 
 // Each factory returns { mesh: Object3D, update(elapsed), bloom? }. `bloom`
 // is optional — scenes that don't set it just get DEFAULT_BLOOM. Listed
@@ -52,7 +57,7 @@ export function createBackground(canvas) {
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x000000);
-  scene.fog = new THREE.FogExp2(0x000000, 0.038);
+  scene.fog = new THREE.FogExp2(FOG_COLOR, FOG_DENSITY);
 
   const camera = new THREE.PerspectiveCamera(
     55,
