@@ -1,10 +1,14 @@
-import "./style.css";
-import { createBackground } from "./background.js";
-import { initScrollReveal } from "./reveal.js";
+import "./ui/style.css";
+import { createBackground } from "./rendering/background.js";
+import { initScrollReveal } from "./ui/reveal.js";
+import { initMagneticButtons } from "./ui/magnetic.js";
+import { initSectionRail } from "./ui/sectionRail.js";
 
 const canvas = document.getElementById("bg");
 const background = createBackground(canvas);
 initScrollReveal();
+initMagneticButtons();
+initSectionRail();
 
 const sceneButtons = document.querySelectorAll(".scene-btn");
 

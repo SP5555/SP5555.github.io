@@ -19,7 +19,7 @@
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="/src/ui/style.css" />
   </head>
   <body>
     <canvas id="bg"></canvas>
@@ -27,7 +27,7 @@
     <div id="scene-fade-overlay"></div>
 
     <main id="content">
-      <section class="hero">
+      <section id="hero" class="hero">
         <div class="hero-stack">
           <div class="glass-card hero-card">
             <p class="eyebrow reveal">Computer Science, UC Davis '26</p>
@@ -42,7 +42,7 @@
           <div class="social-row reveal">
             <a
               id="email-link"
-              class="social-btn glass-card"
+              class="social-btn glass-card magnetic"
               href="mailto:setpaing20022002@gmail.com"
               aria-label="Copy email address"
             >
@@ -54,7 +54,7 @@
               <span class="social-label">Email</span>
             </a>
             <a
-              class="social-btn glass-card"
+              class="social-btn glass-card magnetic"
               href="https://github.com/SP5555"
               target="_blank"
               rel="noopener"
@@ -68,7 +68,7 @@
               <span class="social-label">GitHub</span>
             </a>
             <a
-              class="social-btn glass-card"
+              class="social-btn glass-card magnetic"
               href="https://linkedin.com/in/spaing55"
               target="_blank"
               rel="noopener"
@@ -91,7 +91,7 @@
         </div>
       </section>
 
-      <section class="section">
+      <section id="experience" class="section">
         <h2 class="section-title reveal">Experience</h2>
         <div class="card-grid">
           <article class="glass-card reveal">
@@ -153,7 +153,7 @@
         </div>
       </section>
 
-      <section class="section">
+      <section id="projects" class="section">
         <h2 class="section-title reveal">Projects</h2>
         <div class="card-grid">
           <article class="glass-card reveal">
@@ -307,7 +307,7 @@
         </div>
       </section>
 
-      <section class="section">
+      <section id="education" class="section">
         <h2 class="section-title reveal">Education</h2>
         <div class="card-grid">
           <article class="glass-card reveal">
@@ -353,7 +353,22 @@
       </button>
     </div>
 
-    <button id="back-to-top" class="glass-card back-to-top" aria-label="Back to top">
+    <nav class="section-rail" aria-label="Page sections">
+      <a class="rail-dot" href="#hero" data-section="hero" aria-label="Hero"
+        ><span class="rail-tooltip">Hero</span></a
+      >
+      <a class="rail-dot" href="#experience" data-section="experience" aria-label="Experience"
+        ><span class="rail-tooltip">Experience</span></a
+      >
+      <a class="rail-dot" href="#projects" data-section="projects" aria-label="Projects"
+        ><span class="rail-tooltip">Projects</span></a
+      >
+      <a class="rail-dot" href="#education" data-section="education" aria-label="Education"
+        ><span class="rail-tooltip">Education</span></a
+      >
+    </nav>
+
+    <button id="back-to-top" class="glass-card back-to-top magnetic" aria-label="Back to top">
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M12 7.5 4.5 15l1.4 1.4L12 10.3l6.1 6.1L19.5 15z" />
       </svg>

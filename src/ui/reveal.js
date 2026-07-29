@@ -11,7 +11,12 @@ export function initScrollReveal() {
         }
       }
     },
-    { threshold: 0.15, rootMargin: "0px 0px -10% 0px" }
+    // fixed px, not a percentage — a percentage-based bottom margin scales
+    // with viewport height, so on very tall/large screens the excluded
+    // zone grows large enough that a short trailing element (the footer)
+    // can end up permanently stuck inside it once you're scrolled all the
+    // way down, with no more scroll distance left to move it out
+    { threshold: 0.15, rootMargin: "0px 0px -80px 0px" }
   );
 
   targets.forEach((el, i) => {
