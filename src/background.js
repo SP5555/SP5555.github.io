@@ -88,7 +88,12 @@ export function createBackground(canvas) {
   const renderTarget = new THREE.WebGLRenderTarget(
     window.innerWidth,
     window.innerHeight,
-    { samples: 4 }
+    // HalfFloatType so bloom sees true, unclamped brightness (values above
+    // 1.0 survive) instead of the default 8-bit target silently clipping
+    // everything to [0,1] before bloom ever runs — the final image is
+    // still ordinary 8-bit once written to the canvas, this only affects
+    // the intermediate pipeline, so it looks the same on every display
+    { samples: 4, type: THREE.HalfFloatType }
   );
   const composer = new EffectComposer(renderer, renderTarget);
   composer.addPass(new RenderPass(scene, camera));
@@ -190,9 +195,17 @@ export function createBackground(canvas) {
     });
   }
 
+  // cached instead of read from the DOM every frame in tick() — scrollHeight
+  // only actually changes on resize or once late-loading content (fonts,
+  // images) settles, not every single frame
+  let maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+  function updateMaxScroll() {
+    maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+  }
+  window.addEventListener("load", updateMaxScroll);
+
   function scrollProgress() {
-    const max = document.documentElement.scrollHeight - window.innerHeight;
-    return max > 0 ? window.scrollY / max : 0;
+    return maxScroll > 0 ? window.scrollY / maxScroll : 0;
   }
 
   window.addEventListener("resize", () => {
@@ -200,6 +213,7 @@ export function createBackground(canvas) {
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
     composer.setSize(window.innerWidth, window.innerHeight);
+    updateMaxScroll();
   });
 
   function tick() {

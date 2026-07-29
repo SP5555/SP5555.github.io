@@ -37,11 +37,11 @@ const NOISE_FREQ_INTERVAL_MIN = 4; // seconds to hold near a target before picki
 const NOISE_FREQ_INTERVAL_MAX = 6;
 const NOISE_FREQ_TRANSITION = 4; // seconds to ease from one target to the next
 
-const TIME_SPEED = 0.12; // how fast the surface morphs over time
-const DISPLACEMENT_AMPLITUDE = 0.8; // how far vertices bulge in/out
+const TIME_SPEED = 0.06; // how fast the surface morphs over time
+const DISPLACEMENT_AMPLITUDE = 0.3; // how far vertices bulge in/out
 
 const GLOW_FLOOR = 0.0; // inner core's rest brightness — 0 keeps it genuinely black between patches
-const GLOW_MAX = 1.0; // hard cap on the inner core's total glow, in case several patches overlap
+const GLOW_MAX = 1.6; // hard cap on the inner core's total glow, in case several patches overlap
 
 // ---- Global breathe: same idea as the cube scene's breathing wave — on a
 // random interval, the whole inner core flashes together once, adding onto
@@ -52,7 +52,7 @@ const BREATHE_FIRST_DELAY = 2; // don't start until the boot ignite has settled
 const BREATHE_DURATION = 2.6; // total time from flash start to fully faded out
 const BREATHE_ATTACK = 0.2; // seconds to ramp up to peak brightness
 const BREATHE_BRIGHTNESS = 0.6; // extra glow at the flash's peak
-const GLOW_FACET_SHRINK = 0.2; // how much a facet's own FACET_FILL shrinks (gap widens) at max local glow — reacts to patches and the global breathe alike, since both feed the same glow value
+const GLOW_FACET_SHRINK = 0.32; // how much a facet's own FACET_FILL shrinks (gap widens) at max local glow — reacts to patches and the global breathe alike, since both feed the same glow value
 
 // ---- Glow patches: independent Gaussian "blooms" of light, each centered
 // on a random facet and spreading over its neighbors by graph distance
@@ -71,7 +71,7 @@ const PATCH_ATTACK_MAX = 0.2;
 const PATCH_WAIT_MIN = 0.0; // gap after a patch dies before that slot spawns a new one
 const PATCH_WAIT_MAX = 1.0;
 const PATCH_BRIGHTNESS = 1.0; // peak brightness at a patch's center
-const PATCH_SIGMA_CUTOFF = 2.4; // truncate the gaussian tail past this many sigmas (perf, not visual)
+const PATCH_SIGMA_CUTOFF = 2.8; // truncate the gaussian tail past this many sigmas (perf, not visual)
 
 const GLINT_SHARPNESS = 6; // higher = narrower, snappier glint highlights
 const GLINT_MIN = 0.01; // outer shell's brightness at worst-angle facets (baseline self-lit look)
@@ -385,7 +385,6 @@ export function createMorphMesh() {
     patches.push({
       alive: false,
       reached: [],
-      sigma: 1,
       spawnTime: 0,
       duration: 1,
       nextEventAt:
@@ -400,8 +399,14 @@ export function createMorphMesh() {
     const maxHops = Math.ceil(sigma * PATCH_SIGMA_CUTOFF);
 
     patch.alive = true;
-    patch.reached = bfsWithinHops(adjacency, centerFace, maxHops);
-    patch.sigma = sigma;
+    // precompute each reached facet's Gaussian falloff once, here — it only
+    // depends on hop-distance and sigma, both fixed for this patch's whole
+    // lifetime, so recomputing Math.exp() every frame in the render loop
+    // (for every reached facet, of every active patch) would be pure waste
+    const twoSigmaSq = 2 * sigma * sigma;
+    patch.reached = bfsWithinHops(adjacency, centerFace, maxHops).map(
+      ([face, hop]) => [face, Math.exp(-(hop * hop) / twoSigmaSq)]
+    );
     patch.spawnTime = elapsed;
     patch.duration =
       PATCH_DURATION_MIN +
@@ -503,9 +508,8 @@ export function createMorphMesh() {
         envelope = (1 - smoothstep(decayT)) * PATCH_BRIGHTNESS;
       }
 
-      const twoSigmaSq = 2 * patch.sigma * patch.sigma;
-      for (const [face, hop] of patch.reached) {
-        glowAccum[face] += envelope * Math.exp(-(hop * hop) / twoSigmaSq);
+      for (const [face, falloff] of patch.reached) {
+        glowAccum[face] += envelope * falloff;
       }
     }
 
