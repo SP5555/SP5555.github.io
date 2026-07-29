@@ -177,22 +177,30 @@ export function createBackground(canvas) {
   const current = { rotX: 0, rotY: 0 };
 
   if (!prefersReducedMotion) {
-    window.addEventListener("pointermove", (e) => {
-      // touch input also fires pointermove — ignore it so a finger drag
-      // doesn't fight with deviceorientation for the same target values
-      if (e.pointerType && e.pointerType !== "mouse") return;
+    window.addEventListener(
+      "pointermove",
+      (e) => {
+        // touch input also fires pointermove — ignore it so a finger drag
+        // doesn't fight with deviceorientation for the same target values
+        if (e.pointerType && e.pointerType !== "mouse") return;
 
-      const nx = (e.clientX / window.innerWidth) * 2 - 1;
-      const ny = (e.clientY / window.innerHeight) * 2 - 1;
-      target.rotY = nx * PARALLAX_MAX_ROT_Y;
-      target.rotX = ny * PARALLAX_MAX_ROT_X;
-    });
+        const nx = (e.clientX / window.innerWidth) * 2 - 1;
+        const ny = (e.clientY / window.innerHeight) * 2 - 1;
+        target.rotY = nx * PARALLAX_MAX_ROT_Y;
+        target.rotX = ny * PARALLAX_MAX_ROT_X;
+      },
+      { passive: true }
+    );
 
-    window.addEventListener("deviceorientation", (e) => {
-      if (e.beta == null || e.gamma == null) return;
-      target.rotX = THREE.MathUtils.clamp(e.beta / 90, -1, 1) * PARALLAX_MAX_ROT_X;
-      target.rotY = THREE.MathUtils.clamp(e.gamma / 90, -1, 1) * PARALLAX_MAX_ROT_Y;
-    });
+    window.addEventListener(
+      "deviceorientation",
+      (e) => {
+        if (e.beta == null || e.gamma == null) return;
+        target.rotX = THREE.MathUtils.clamp(e.beta / 90, -1, 1) * PARALLAX_MAX_ROT_X;
+        target.rotY = THREE.MathUtils.clamp(e.gamma / 90, -1, 1) * PARALLAX_MAX_ROT_Y;
+      },
+      { passive: true }
+    );
   }
 
   // cached instead of read from the DOM every frame in tick() — scrollHeight
@@ -208,13 +216,24 @@ export function createBackground(canvas) {
     return maxScroll > 0 ? window.scrollY / maxScroll : 0;
   }
 
+  // dragging a window edge fires many resize events per second; renderer/
+  // composer.setSize() reallocate render targets, so collapse bursts down
+  // to one update per animation frame instead of one per event
+  let resizePending = false;
   window.addEventListener("resize", () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    composer.setSize(window.innerWidth, window.innerHeight);
-    updateMaxScroll();
+    if (resizePending) return;
+    resizePending = true;
+    requestAnimationFrame(() => {
+      resizePending = false;
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
+      updateMaxScroll();
+    });
   });
+
+  let rafId = null;
 
   function tick() {
     const elapsed = clock.getElapsedTime();
@@ -233,9 +252,22 @@ export function createBackground(canvas) {
     }
 
     composer.render();
-    requestAnimationFrame(tick);
+    rafId = requestAnimationFrame(tick);
   }
   tick();
+
+  // stop rendering entirely while the tab is hidden/minimized — nothing is
+  // on screen to see it, so there's no reason to keep burning GPU/battery
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    } else if (rafId === null) {
+      tick();
+    }
+  });
 
   return {
     renderer,

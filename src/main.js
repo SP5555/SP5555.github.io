@@ -1,30 +1,11 @@
 import "./ui/style.css";
-import { createBackground } from "./rendering/background.js";
 import { initScrollReveal } from "./ui/reveal.js";
 import { initMagneticButtons } from "./ui/magnetic.js";
 import { initSectionRail } from "./ui/sectionRail.js";
 
-const canvas = document.getElementById("bg");
-const background = createBackground(canvas);
 initScrollReveal();
 initMagneticButtons();
 initSectionRail();
-
-const sceneButtons = document.querySelectorAll(".scene-btn");
-
-function setActiveSceneButton(sceneId) {
-  sceneButtons.forEach((btn) => {
-    btn.classList.toggle("is-active", btn.dataset.scene === sceneId);
-  });
-}
-setActiveSceneButton(background.getActiveSceneId());
-
-sceneButtons.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    background.setScene(btn.dataset.scene);
-    setActiveSceneButton(btn.dataset.scene);
-  });
-});
 
 const emailLink = document.getElementById("email-link");
 const emailLabel = emailLink.querySelector(".social-label");
@@ -64,4 +45,31 @@ window.addEventListener(
 
 backToTop.addEventListener("click", () => {
   window.scrollTo({ top: 0, behavior: prefersReducedMotion ? "auto" : "smooth" });
+});
+
+// ---- Renderer (loaded last, on purpose) ----
+// three.js + the scene modules are by far the heaviest thing on this page.
+// A dynamic import() puts them in their own chunk that starts fetching here
+// but doesn't block the lightweight UI wiring above — on a slow connection
+// the resume content, nav, and buttons are already interactive while the
+// WebGL bundle is still coming down the wire.
+const sceneButtons = document.querySelectorAll(".scene-btn");
+
+function setActiveSceneButton(sceneId) {
+  sceneButtons.forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.scene === sceneId);
+  });
+}
+
+import("./rendering/background.js").then(({ createBackground }) => {
+  const canvas = document.getElementById("bg");
+  const background = createBackground(canvas);
+  setActiveSceneButton(background.getActiveSceneId());
+
+  sceneButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      background.setScene(btn.dataset.scene);
+      setActiveSceneButton(btn.dataset.scene);
+    });
+  });
 });

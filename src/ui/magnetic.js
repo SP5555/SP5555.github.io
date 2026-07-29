@@ -22,37 +22,41 @@ export function initMagneticButtons() {
     });
   }
 
-  window.addEventListener("pointermove", (e) => {
-    // touch input also fires pointermove — a magnetic pull based on a
-    // finger's transient touch position doesn't make sense
-    if (e.pointerType && e.pointerType !== "mouse") return;
+  window.addEventListener(
+    "pointermove",
+    (e) => {
+      // touch input also fires pointermove — a magnetic pull based on a
+      // finger's transient touch position doesn't make sense
+      if (e.pointerType && e.pointerType !== "mouse") return;
 
-    elements.forEach((el) => {
-      const rect = el.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const dx = e.clientX - cx;
-      const dy = e.clientY - cy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      elements.forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const dx = e.clientX - cx;
+        const dy = e.clientY - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
 
-      if (dist < MAGNETIC_RADIUS) {
-        const pull = (1 - dist / MAGNETIC_RADIUS) * MAGNETIC_STRENGTH;
-        const offsetX = Math.max(
-          Math.min(dx * pull, MAGNETIC_MAX_OFFSET),
-          -MAGNETIC_MAX_OFFSET
-        );
-        const offsetY = Math.max(
-          Math.min(dy * pull, MAGNETIC_MAX_OFFSET),
-          -MAGNETIC_MAX_OFFSET
-        );
-        el.style.setProperty("--mx", `${offsetX}px`);
-        el.style.setProperty("--my", `${offsetY}px`);
-      } else {
-        el.style.setProperty("--mx", "0px");
-        el.style.setProperty("--my", "0px");
-      }
-    });
-  });
+        if (dist < MAGNETIC_RADIUS) {
+          const pull = (1 - dist / MAGNETIC_RADIUS) * MAGNETIC_STRENGTH;
+          const offsetX = Math.max(
+            Math.min(dx * pull, MAGNETIC_MAX_OFFSET),
+            -MAGNETIC_MAX_OFFSET
+          );
+          const offsetY = Math.max(
+            Math.min(dy * pull, MAGNETIC_MAX_OFFSET),
+            -MAGNETIC_MAX_OFFSET
+          );
+          el.style.setProperty("--mx", `${offsetX}px`);
+          el.style.setProperty("--my", `${offsetY}px`);
+        } else {
+          el.style.setProperty("--mx", "0px");
+          el.style.setProperty("--my", "0px");
+        }
+      });
+    },
+    { passive: true }
+  );
 
   window.addEventListener("blur", resetAll);
 }
