@@ -8,7 +8,13 @@ export const PALETTE_SETS = [
   [0x19ff3a, 0xf6ff19],
 ];
 
-export const BLACK = new THREE.Color(0x000000);
+// The site's shared "unlit" base color — every scene's boot animation
+// lerps away from this, and background.js uses it for the scene
+// background + fog. Keep style.css's --base-color custom property in
+// sync with this value (CSS and JS don't share state on a static site,
+// so this is the one JS-side source of truth; that CSS var is the other).
+export const BASE_COLOR_HEX = 0x000000;
+export const BLACK = new THREE.Color(BASE_COLOR_HEX);
 
 function toColorArray(hexes) {
   return hexes.map((c) => new THREE.Color(c));

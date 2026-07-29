@@ -1,5 +1,9 @@
 :root {
   color-scheme: dark;
+  /* keep in sync with BASE_COLOR_HEX in src/palette.js — the site's
+     shared "unlit" base tone (scene background/fog/overlays all derive
+     from this on the CSS side, same as the JS side) */
+  --base-color: #000000;
 }
 
 * {
@@ -11,7 +15,7 @@
 html, body {
   width: 100%;
   height: 100%;
-  background: #000;
+  background: var(--base-color);
 }
 
 body {
@@ -36,8 +40,8 @@ body {
   pointer-events: none;
   background: radial-gradient(
     ellipse at center,
-    rgba(0, 0, 0, 0.2) 0%,
-    rgba(0, 0, 0, 0.4) 100%
+    color-mix(in srgb, var(--base-color) 20%, transparent) 0%,
+    color-mix(in srgb, var(--base-color) 40%, transparent) 100%
   );
 }
 
@@ -46,7 +50,7 @@ body {
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  background: #000;
+  background: var(--base-color);
   opacity: 0;
   transition: opacity 0.4s ease;
 }
@@ -144,16 +148,18 @@ a {
 }
 
 .glass-card.social-btn {
-  display: flex;
+  display: inline-grid;
+  grid-template-columns: 22px 0fr;
   align-items: center;
-  justify-content: center;
-  width: 48px;
   height: 48px;
-  padding: 0;
+  padding: 0 13px;
+  overflow: hidden;
   color: rgba(255, 255, 255, 0.8);
   border-radius: 0.9rem;
+  text-decoration: none;
   transition: background 0.3s ease, border-color 0.3s ease,
-    backdrop-filter 0.3s ease, color 0.2s ease;
+    backdrop-filter 0.3s ease, color 0.2s ease,
+    grid-template-columns 0.3s ease;
 }
 
 .social-btn svg {
@@ -162,8 +168,25 @@ a {
   fill: currentColor;
 }
 
-.social-btn:hover {
+.social-label {
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: opacity 0.2s ease, margin-left 0.3s ease;
+}
+
+.social-btn:hover,
+.social-btn:focus-visible {
   color: #fff;
+  grid-template-columns: 22px 1fr;
+}
+
+.social-btn:hover .social-label,
+.social-btn:focus-visible .social-label {
+  opacity: 1;
+  margin-left: 0.6rem;
 }
 
 .glass-card.back-to-top {
@@ -206,31 +229,38 @@ a {
   color: #fff;
 }
 
-.scene-picker {
+/* one glass-card pill housing all scene segments, instead of a separate
+   card per button — same one-tap-any-scene behavior, lighter chrome.
+   Compound selector (like .glass-card.back-to-top) so this radius/padding
+   reliably wins over the base .glass-card rule regardless of source order. */
+.glass-card.scene-picker {
   position: fixed;
   right: 1.5rem;
   top: 1.5rem;
   z-index: 3;
   display: flex;
-  gap: 0.6rem;
+  gap: 0.15rem;
+  padding: 0.3rem;
+  border-radius: 999px;
 }
 
-.glass-card.scene-btn {
+.scene-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   padding: 0;
-  border-radius: 0.8rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
   color: rgba(255, 255, 255, 0.55);
   font: inherit;
   font-size: 0.95rem;
   font-weight: 600;
   appearance: none;
   cursor: pointer;
-  transition: background 0.3s ease, border-color 0.3s ease,
-    backdrop-filter 0.3s ease, color 0.2s ease, transform 0.15s ease,
+  transition: background 0.3s ease, color 0.2s ease, transform 0.15s ease,
     box-shadow 0.3s ease;
 }
 
@@ -244,7 +274,6 @@ a {
 
 .scene-btn.is-active {
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.55);
   background: rgba(255, 255, 255, 0.16);
   animation: scene-btn-glow 2.4s ease-in-out infinite;
 }

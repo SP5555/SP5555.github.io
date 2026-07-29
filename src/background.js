@@ -6,6 +6,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { createCubeField } from "./cubes.js";
 import { createGeoSphereField } from "./geoSphere.js";
 import { createMorphMesh } from "./morphMesh.js";
+import { BASE_COLOR_HEX } from "./palette.js";
 
 const prefersReducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)"
@@ -19,9 +20,10 @@ const DEFAULT_BLOOM = { strength: 1.0, radius: 1.0, threshold: 0.0 };
 const PARALLAX_MAX_ROT_Y = 0.03;
 const PARALLAX_MAX_ROT_X = 0.02;
 
-// shared by all scenes — color should match the background so fog blends to
-// black; density is exponential falloff (higher = fog starts closer in)
-const FOG_COLOR = 0x000000;
+// shared by all scenes — matches BASE_COLOR_HEX so fog blends to the same
+// base tone as the background; density is exponential falloff (higher =
+// fog starts closer in)
+const FOG_COLOR = BASE_COLOR_HEX;
 const FOG_DENSITY = 0.03;
 
 // Each factory returns { mesh: Object3D, update(elapsed), bloom? }. `bloom`
@@ -56,7 +58,7 @@ export function createBackground(canvas) {
   renderer.setSize(window.innerWidth, window.innerHeight);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000);
+  scene.background = new THREE.Color(BASE_COLOR_HEX);
   scene.fog = new THREE.FogExp2(FOG_COLOR, FOG_DENSITY);
 
   const camera = new THREE.PerspectiveCamera(

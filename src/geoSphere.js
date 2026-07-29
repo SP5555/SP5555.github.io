@@ -413,9 +413,13 @@ export function createGeoSphereField() {
         // the resting edge underneath this segment is hidden (see the
         // occupied-edge check above), so bake its dim appearance in here
         // as a floor — the pulse geometry alone then reproduces what both
-        // layers used to show together, without the two ever coinciding
+        // layers used to show together, without the two ever coinciding.
+        // Lerp toward BLACK (the scene's actual ambient base color, not
+        // literally black) instead of a plain multiply, so this matches
+        // true alpha-blending over the real background rather than
+        // assuming it's black.
         tmpFloor.lerpColors(nodeColors[a], nodeColors[b], localT0);
-        tmpFloor.multiplyScalar(EDGE_RESTING_OPACITY);
+        tmpFloor.lerpColors(BLACK, tmpFloor, EDGE_RESTING_OPACITY);
         pulseColorAttr.setXYZ(
           segIndex * 2,
           tmpFloor.r + tmpColor.r * intensity0,
@@ -423,7 +427,7 @@ export function createGeoSphereField() {
           tmpFloor.b + tmpColor.b * intensity0
         );
         tmpFloor.lerpColors(nodeColors[a], nodeColors[b], localT1);
-        tmpFloor.multiplyScalar(EDGE_RESTING_OPACITY);
+        tmpFloor.lerpColors(BLACK, tmpFloor, EDGE_RESTING_OPACITY);
         pulseColorAttr.setXYZ(
           segIndex * 2 + 1,
           tmpFloor.r + tmpColor.r * intensity1,

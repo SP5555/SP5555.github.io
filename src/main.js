@@ -22,6 +22,29 @@ sceneButtons.forEach((btn) => {
   });
 });
 
+const emailLink = document.getElementById("email-link");
+const emailLabel = emailLink.querySelector(".social-label");
+const defaultEmailLabel = emailLabel.textContent;
+const emailAddress = emailLink.href.replace(/^mailto:/, "");
+let emailRevertTimeoutId = null;
+
+emailLink.addEventListener("click", (e) => {
+  e.preventDefault();
+  navigator.clipboard.writeText(emailAddress).then(
+    () => {
+      emailLabel.textContent = "Copied!";
+      clearTimeout(emailRevertTimeoutId);
+      emailRevertTimeoutId = window.setTimeout(() => {
+        emailLabel.textContent = defaultEmailLabel;
+      }, 1800);
+    },
+    () => {
+      // clipboard permission denied/unavailable — fall back to the plain mailto link
+      window.location.href = emailLink.href;
+    }
+  );
+});
+
 const backToTop = document.getElementById("back-to-top");
 const prefersReducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)"

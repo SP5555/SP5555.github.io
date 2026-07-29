@@ -28,21 +28,20 @@ const FACET_FILL = 0.96; // outer shell: 1.0 = seamless, <1 = gaps the inner cor
 // of an always-positive value, it can never exceed the outer shell,
 // no matter how the other constants get tuned
 const INNER_RADIUS_RATIO = 0.998;
-const OUTER_BRIGHTNESS = 0.18; // dim, glint-only self-lit look for the outer shell (no patch glow)
 
 // spatial frequency of the morphing noise wanders between these bounds
 // over time instead of sitting at one fixed value — see createValueWanderer
 const NOISE_FREQ_MIN = 0.2;
-const NOISE_FREQ_MAX = 1.6;
+const NOISE_FREQ_MAX = 10;
 const NOISE_FREQ_INTERVAL_MIN = 4; // seconds to hold near a target before picking a new one
-const NOISE_FREQ_INTERVAL_MAX = 10;
+const NOISE_FREQ_INTERVAL_MAX = 6;
 const NOISE_FREQ_TRANSITION = 4; // seconds to ease from one target to the next
 
 const TIME_SPEED = 0.12; // how fast the surface morphs over time
 const DISPLACEMENT_AMPLITUDE = 0.8; // how far vertices bulge in/out
 
 const GLOW_FLOOR = 0.0; // inner core's rest brightness — 0 keeps it genuinely black between patches
-const GLOW_MAX = 1.6; // hard cap on the inner core's total glow, in case several patches overlap
+const GLOW_MAX = 1.0; // hard cap on the inner core's total glow, in case several patches overlap
 
 // ---- Global breathe: same idea as the cube scene's breathing wave — on a
 // random interval, the whole inner core flashes together once, adding onto
@@ -52,7 +51,7 @@ const BREATHE_INTERVAL_MAX = 10;
 const BREATHE_FIRST_DELAY = 2; // don't start until the boot ignite has settled
 const BREATHE_DURATION = 2.6; // total time from flash start to fully faded out
 const BREATHE_ATTACK = 0.2; // seconds to ramp up to peak brightness
-const BREATHE_BRIGHTNESS = 1.0; // extra glow at the flash's peak
+const BREATHE_BRIGHTNESS = 0.6; // extra glow at the flash's peak
 const GLOW_FACET_SHRINK = 0.2; // how much a facet's own FACET_FILL shrinks (gap widens) at max local glow — reacts to patches and the global breathe alike, since both feed the same glow value
 
 // ---- Glow patches: independent Gaussian "blooms" of light, each centered
@@ -64,19 +63,19 @@ const GLOW_FACET_SHRINK = 0.2; // how much a facet's own FACET_FILL shrinks (gap
 // brightness read as two decoupled things. ----
 const PATCH_COUNT = 60; // how many patches are alive/waiting at once
 const PATCH_SIZE_MIN = 1; // gaussian sigma, in hop-distance (~triangles) across the surface
-const PATCH_SIZE_MAX = 6;
+const PATCH_SIZE_MAX = 4;
 const PATCH_DURATION_MIN = 2.0; // seconds a patch stays alive (light-up + fade out)
 const PATCH_DURATION_MAX = 6.0;
 const PATCH_ATTACK_MIN = 0.1; // seconds to ramp up to peak brightness at spawn
 const PATCH_ATTACK_MAX = 0.2;
 const PATCH_WAIT_MIN = 0.0; // gap after a patch dies before that slot spawns a new one
 const PATCH_WAIT_MAX = 1.0;
-const PATCH_BRIGHTNESS = 1.6; // peak brightness at a patch's center
-const PATCH_SIGMA_CUTOFF = 2.6; // truncate the gaussian tail past this many sigmas (perf, not visual)
+const PATCH_BRIGHTNESS = 1.0; // peak brightness at a patch's center
+const PATCH_SIGMA_CUTOFF = 2.4; // truncate the gaussian tail past this many sigmas (perf, not visual)
 
 const GLINT_SHARPNESS = 6; // higher = narrower, snappier glint highlights
-const GLINT_MIN = 0.1; // baseline light-catching multiplier even off-angle
-const GLINT_MAX = 0.4; // multiplier at a perfectly-aligned facet — below 1 so even the best angle isn't full brightness
+const GLINT_MIN = 0.01; // outer shell's brightness at worst-angle facets (baseline self-lit look)
+const GLINT_MAX = 0.04; // outer shell's brightness at perfectly-aligned facets
 const LIGHT_DIR = new THREE.Vector3(0.4, 0.6, 1).normalize();
 
 const COLOR_SPEED_MIN = 0.01;
@@ -200,30 +199,70 @@ function bfsWithinHops(adjacency, startFace, maxHops) {
 // A scalar that eases toward a fresh random target within [min, max] every
 // interval seconds (randomized between intervalMin/Max), instead of
 // sitting at one fixed value — same "random target + smooth ease" idea as
-// the palette cycler, just for a single number.
-function createValueWanderer({ min, max, intervalMin, intervalMax, transitionDuration }) {
-  let fromValue = min + Math.random() * (max - min);
-  let toValue = min + Math.random() * (max - min);
+// the palette cycler, just for a single number. With logScale, targets are
+// sampled uniformly in log-space instead of linear-space, so every
+// "doubling" within [min, max] is equally likely to be picked — a better
+// fit for values (like a spatial frequency) whose *effect* is
+// multiplicative rather than additive.
+function createValueWanderer({
+  min,
+  max,
+  intervalMin,
+  intervalMax,
+  transitionDuration,
+  logScale = false,
+}) {
+  const logMin = Math.log(min);
+  const logMax = Math.log(max);
+  function sampleTarget() {
+    if (logScale) return Math.exp(logMin + Math.random() * (logMax - logMin));
+    return min + Math.random() * (max - min);
+  }
+
+  let fromValue = sampleTarget();
+  let toValue = sampleTarget();
   let transitionStart = 0;
   let nextChangeAt =
     intervalMin + Math.random() * (intervalMax - intervalMin);
 
-  function update(elapsed) {
+  function blendT(elapsed) {
+    return smoothstep(
+      Math.min(
+        Math.max((elapsed - transitionStart) / transitionDuration, 0),
+        1
+      )
+    );
+  }
+
+  function currentValue(elapsed) {
+    return fromValue + (toValue - fromValue) * blendT(elapsed);
+  }
+
+  function step(elapsed) {
     if (elapsed >= nextChangeAt) {
-      fromValue = toValue;
-      toValue = min + Math.random() * (max - min);
+      // start the new transition from wherever we actually are right now,
+      // not the old target — otherwise a retrigger before the previous
+      // transition finished (e.g. intervalMin < transitionDuration) would
+      // snap the value instead of continuing smoothly
+      fromValue = currentValue(elapsed);
+      toValue = sampleTarget();
       transitionStart = elapsed;
       nextChangeAt =
         elapsed + intervalMin + Math.random() * (intervalMax - intervalMin);
     }
-    const t = Math.min(
-      Math.max((elapsed - transitionStart) / transitionDuration, 0),
-      1
-    );
-    return fromValue + (toValue - fromValue) * smoothstep(t);
   }
 
-  return { update };
+  // exposes the raw from/to/blend state instead of a single interpolated
+  // number — for callers that need to blend something derived from this
+  // value (e.g. two full noise evaluations) rather than blending the
+  // parameter itself, which can produce erratic in-between results when
+  // the parameter's effect is nonlinear (like a spatial frequency)
+  function getBlendState(elapsed) {
+    step(elapsed);
+    return { from: fromValue, to: toValue, blend: blendT(elapsed) };
+  }
+
+  return { getBlendState };
 }
 
 export function createMorphMesh() {
@@ -381,8 +420,11 @@ export function createMorphMesh() {
     intervalMin: NOISE_FREQ_INTERVAL_MIN,
     intervalMax: NOISE_FREQ_INTERVAL_MAX,
     transitionDuration: NOISE_FREQ_TRANSITION,
+    logScale: true,
   });
   const tmpColor = new THREE.Color();
+  const lightDirLocal = new THREE.Vector3();
+  const groupQuatInv = new THREE.Quaternion();
 
   let nextBreatheAt =
     BREATHE_FIRST_DELAY +
@@ -390,6 +432,14 @@ export function createMorphMesh() {
   let breatheStartTime = null;
 
   function update(elapsed) {
+    // set the group's rotation for this frame first, so its quaternion is
+    // current before we use it below to keep the glint pointed at a
+    // direction fixed in world space (not spinning along with the mesh)
+    group.rotation.y = elapsed * ROTATE_SPEED_Y;
+    group.rotation.x = Math.sin(elapsed * ROTATE_SPEED_X) * ROTATE_WOBBLE;
+    groupQuatInv.copy(group.quaternion).invert();
+    lightDirLocal.copy(LIGHT_DIR).applyQuaternion(groupQuatInv);
+
     const inPaletteGlitch = paletteCycler.update(elapsed);
     const palette = paletteCycler.palette;
 
@@ -459,17 +509,42 @@ export function createMorphMesh() {
       }
     }
 
-    const noiseFreq = noiseFreqWanderer.update(elapsed);
+    const { from: freqFrom, to: freqTo, blend: freqBlend } =
+      noiseFreqWanderer.getBlendState(elapsed);
     const timeOffset = elapsed * TIME_SPEED;
     for (let i = 0; i < vertexCount; i++) {
       const dx = restDirs[i * 3];
       const dy = restDirs[i * 3 + 1];
       const dz = restDirs[i * 3 + 2];
-      const n = fbm3D(
-        dx * noiseFreq + timeOffset,
-        dy * noiseFreq - timeOffset * 0.7,
-        dz * noiseFreq + timeOffset * 0.5
-      );
+
+      let n;
+      if (freqBlend >= 1) {
+        // settled — only one frequency in play, one evaluation needed
+        n = fbm3D(
+          dx * freqTo + timeOffset,
+          dy * freqTo - timeOffset * 0.7,
+          dz * freqTo + timeOffset * 0.5
+        );
+      } else {
+        // mid-transition: blend the two *resulting* surfaces (evaluated
+        // at the old and new frequency) rather than the frequency
+        // itself — sweeping the frequency continuously would resample
+        // the noise field at rapidly-changing intermediate frequencies,
+        // producing erratic, uncorrelated bumps instead of a clean
+        // crossfade between two stable shapes
+        const nFrom = fbm3D(
+          dx * freqFrom + timeOffset,
+          dy * freqFrom - timeOffset * 0.7,
+          dz * freqFrom + timeOffset * 0.5
+        );
+        const nTo = fbm3D(
+          dx * freqTo + timeOffset,
+          dy * freqTo - timeOffset * 0.7,
+          dz * freqTo + timeOffset * 0.5
+        );
+        n = nFrom + (nTo - nFrom) * freqBlend;
+      }
+
       const signed = n * 2 - 1;
       dispSigned[i] = signed;
       const r = RADIUS + signed * DISPLACEMENT_AMPLITUDE;
@@ -549,18 +624,21 @@ export function createMorphMesh() {
       nz /= nlen;
 
       const glintDot = Math.abs(
-        nx * LIGHT_DIR.x + ny * LIGHT_DIR.y + nz * LIGHT_DIR.z
+        nx * lightDirLocal.x + ny * lightDirLocal.y + nz * lightDirLocal.z
       );
       const glint = Math.pow(glintDot, GLINT_SHARPNESS);
 
       // outer shell: dim, glint-driven self-lit look only — no patch glow
       // here, so the only bright light comes from the inner core showing
       // through its gaps
-      const outerBrightness =
-        OUTER_BRIGHTNESS * (GLINT_MIN + glint * (GLINT_MAX - GLINT_MIN));
+      const outerBrightness = GLINT_MIN + glint * (GLINT_MAX - GLINT_MIN);
       const t = elapsed * meta.colorSpeed + meta.colorPhase;
       sampleCyclingColor(palette, t, tmpColor);
-      tmpColor.multiplyScalar(outerBrightness);
+      // lerp toward BLACK (the scene's actual ambient base color) instead
+      // of a plain multiply — the shell is fully opaque, so there's no
+      // background blending to fall back on; a dim facet should read as
+      // "close to ambient," not fade toward pure black regardless of tone
+      tmpColor.lerpColors(BLACK, tmpColor, outerBrightness);
       tmpColor.lerpColors(BLACK, tmpColor, igniteProgress);
 
       if (inPaletteGlitch) {
@@ -632,9 +710,6 @@ export function createMorphMesh() {
     colorAttr.needsUpdate = true;
     innerPosAttr.needsUpdate = true;
     innerColorAttr.needsUpdate = true;
-
-    group.rotation.y = elapsed * ROTATE_SPEED_Y;
-    group.rotation.x = Math.sin(elapsed * ROTATE_SPEED_X) * ROTATE_WOBBLE;
 
     return inPaletteGlitch;
   }
