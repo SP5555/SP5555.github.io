@@ -154,15 +154,6 @@ a {
   gap: 0.75rem;
 }
 
-/* --mx/--my are set by magnetic.js on elements with this class — kept as
-   custom properties (rather than JS setting `transform` directly) so any
-   element-specific transform below can compose the magnetic offset in
-   instead of having it silently overwritten */
-.magnetic {
-  --mx: 0px;
-  --my: 0px;
-}
-
 .glass-card.social-btn {
   display: inline-grid;
   grid-template-columns: 22px 0fr;
@@ -173,10 +164,9 @@ a {
   color: rgba(255, 255, 255, 0.8);
   border-radius: 0.9rem;
   text-decoration: none;
-  transform: translate(var(--mx), var(--my));
   transition: background 0.3s ease, border-color 0.3s ease,
     backdrop-filter 0.3s ease, color 0.2s ease,
-    grid-template-columns 0.3s ease, transform 0.2s ease;
+    grid-template-columns 0.3s ease;
 }
 
 .social-btn svg {
@@ -223,7 +213,7 @@ a {
   appearance: none;
   cursor: pointer;
   opacity: 0;
-  transform: translate(var(--mx), var(--my)) translateY(8px);
+  transform: translateY(8px);
   pointer-events: none;
   transition: background 0.3s ease, border-color 0.3s ease,
     backdrop-filter 0.3s ease, color 0.2s ease, opacity 0.25s ease,
@@ -232,7 +222,7 @@ a {
 
 .glass-card.back-to-top.is-visible {
   opacity: 1;
-  transform: translate(var(--mx), var(--my)) translateY(0);
+  transform: translateY(0);
   pointer-events: auto;
 }
 
@@ -266,7 +256,10 @@ a {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.25);
+  /* 0.25 measured ~2:1 against black, short of the 3:1 non-text UI contrast
+     minimum; 0.38 clears it (~3:1) while staying visibly subtler than the
+     hover/active states */
+  background: rgba(255, 255, 255, 0.38);
   transition: background 0.3s ease, transform 0.3s ease,
     box-shadow 0.3s ease;
 }
@@ -496,7 +489,9 @@ a {
 .footer {
   padding: 3rem 0 5rem;
   text-align: center;
-  color: rgba(255, 255, 255, 0.4);
+  /* 0.4 measured ~3.7:1 against black, short of WCAG AA's 4.5:1 for normal
+     text; 0.5 clears it with margin (~5.3:1) */
+  color: rgba(255, 255, 255, 0.5);
   font-size: 0.85rem;
 }
 

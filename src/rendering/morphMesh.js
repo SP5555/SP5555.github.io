@@ -32,7 +32,7 @@ const INNER_RADIUS_RATIO = 0.998;
 // spatial frequency of the morphing noise wanders between these bounds
 // over time instead of sitting at one fixed value — see createValueWanderer
 const NOISE_FREQ_MIN = 0.2;
-const NOISE_FREQ_MAX = 10;
+const NOISE_FREQ_MAX = 20;
 const NOISE_FREQ_INTERVAL_MIN = 4; // seconds to hold near a target before picking a new one
 const NOISE_FREQ_INTERVAL_MAX = 6;
 const NOISE_FREQ_TRANSITION = 4; // seconds to ease from one target to the next

@@ -1,10 +1,8 @@
 import "./ui/style.css";
 import { initScrollReveal } from "./ui/reveal.js";
-import { initMagneticButtons } from "./ui/magnetic.js";
 import { initSectionRail } from "./ui/sectionRail.js";
 
 initScrollReveal();
-initMagneticButtons();
 initSectionRail();
 
 const emailLink = document.getElementById("email-link");
