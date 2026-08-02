@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>404 &mdash; Set Paing</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="alternate icon" href="/favicon.ico" />
+    <meta name="robots" content="noindex" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        background: #000;
+      }
+
+      body {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        padding: 1.5rem;
+        font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI",
+          sans-serif;
+        color: #fff;
+        text-align: center;
+      }
+
+      /* giant watermark behind the content, breathing fully in and out —
+         2s attack up to peak, 2s decay back down to complete black, on
+         repeat with no pause between breaths */
+      .watermark {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        font-size: min(60vw, 32rem);
+        font-weight: 700;
+        letter-spacing: -0.05em;
+        color: #fff;
+        opacity: 0;
+        transform: translate(-50%, -50%);
+        user-select: none;
+        pointer-events: none;
+        line-height: 1;
+        white-space: nowrap;
+        animation: watermark-breathe 4s ease-in-out infinite;
+      }
+
+      @keyframes watermark-breathe {
+        0%,
+        100% {
+          opacity: 0;
+        }
+        50% {
+          opacity: 0.12;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .watermark {
+          animation: none;
+          opacity: 0.06;
+        }
+      }
+
+      .content {
+        position: relative;
+        max-width: 420px;
+      }
+
+      .eyebrow {
+        color: rgba(255, 255, 255, 0.5);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+
+      .title {
+        margin-top: 0.6rem;
+        font-size: clamp(1.5rem, 5vw, 2.25rem);
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        white-space: nowrap;
+        /* text-align:center only centers a box within its parent's own
+           width — once nowrap content overflows a narrower parent, the
+           overflow anchors to the start edge instead of staying centered.
+           Sizing the box to its own content (max-content) and centering
+           the box itself via translateX sidesteps that entirely. */
+        position: relative;
+        left: 50%;
+        width: max-content;
+        max-width: 90vw;
+        transform: translateX(-50%);
+      }
+
+      /* below this, even the longest title option risks overflowing the
+         viewport at the font-size clamp's floor — let it wrap instead */
+      @media (max-width: 480px) {
+        .title {
+          white-space: normal;
+          position: static;
+          left: auto;
+          width: auto;
+          max-width: none;
+          transform: none;
+        }
+      }
+
+      .subtitle {
+        margin-top: 0.75rem;
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.95rem;
+        line-height: 1.5;
+      }
+
+      .home-link {
+        display: inline-block;
+        margin-top: 2rem;
+        padding: 0.7rem 1.4rem;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 999px;
+        color: #fff;
+        text-decoration: none;
+        font-size: 0.9rem;
+        font-weight: 600;
+        transition: background 0.2s ease, border-color 0.2s ease;
+      }
+
+      .home-link:hover,
+      .home-link:focus-visible {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.3);
+      }
+    </style>
+  </head>
+  <body>
+    <p class="watermark" aria-hidden="true">404</p>
+
+    <div class="content">
+      <p class="eyebrow">404</p>
+      <p class="title" id="title">Lost in the void</p>
+      <p class="subtitle" id="subtitle">
+        This page drifted off somewhere out there. We looked, we couldn't
+        find it either.
+      </p>
+      <a class="home-link" href="/">&larr; Back home</a>
+    </div>
+
+    <script>
+      (function () {
+        // title and subtitle are picked independently — 4 x 4 = 16 possible
+        // combinations instead of 4 fixed pairs
+        var titles = [
+          "Lost in the void",
+          "Nothing rendered here",
+          "You've found the empty space",
+          "This page wandered off",
+        ];
+        var subtitles = [
+          "This page drifted off somewhere out there. We looked, we couldn't find it either.",
+          "This page never showed up — could be broken, could be gone, could've never existed.",
+          "There's nothing at this address. Not even a placeholder.",
+          "Might be missing, might be hiding, might never have existed at all. Let's get you back.",
+        ];
+
+        function pick(arr) {
+          return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        document.getElementById("title").textContent = pick(titles);
+        document.getElementById("subtitle").textContent = pick(subtitles);
+      })();
+    </script>
+  </body>
+</html>
