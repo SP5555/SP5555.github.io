@@ -70,4 +70,26 @@ import("./rendering/background.js").then(({ createBackground }) => {
       setActiveSceneButton(btn.dataset.scene);
     });
   });
+
+  // tints the active button's pulsing glow with the scene's current color —
+  // only the active scene is actually rendering, so only its button has
+  // anything live to sample from
+  if (!prefersReducedMotion) {
+    function hexToRgbTriplet(hex) {
+      const n = parseInt(hex.slice(1), 16);
+      return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
+    }
+
+    function tickGlowColor() {
+      const activeBtn = document.querySelector(".scene-btn.is-active");
+      if (activeBtn) {
+        activeBtn.style.setProperty(
+          "--live-rgb",
+          hexToRgbTriplet(background.getLiveColor())
+        );
+      }
+      requestAnimationFrame(tickGlowColor);
+    }
+    tickGlowColor();
+  }
 });

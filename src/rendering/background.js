@@ -6,13 +6,19 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { createCubeField } from "./cubes.js";
 import { createGeoSphereField } from "./geoSphere.js";
 import { createMorphMesh } from "./morphMesh.js";
-import { BASE_COLOR_HEX } from "./palette.js";
+import { BASE_COLOR_HEX, sampleCyclingColor } from "./palette.js";
 
 const prefersReducedMotion = window.matchMedia(
   "(prefers-reduced-motion: reduce)"
 ).matches;
 
 const SCENE_SWAP_FADE_MS = 400; // must match #scene-fade-overlay's CSS transition duration
+
+// how fast the scene-picker's live-color dot drifts through the active
+// scene's palette — deliberately slower than any individual mesh instance's
+// colorSpeed so it reads as "the palette this scene is on" rather than
+// matching any one cube/node exactly
+const LIVE_DOT_COLOR_SPEED = 0.05;
 
 const DEFAULT_BLOOM = { strength: 1.0, radius: 1.0, threshold: 0.0 };
 
@@ -51,7 +57,6 @@ function disposeObject3D(object) {
 export function createBackground(canvas) {
   const renderer = new THREE.WebGLRenderer({
     canvas,
-    antialias: true,
     alpha: false,
   });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -77,6 +82,8 @@ export function createBackground(canvas) {
 
   let currentMesh = null;
   let updateField = () => false;
+  let currentPaletteCycler = null;
+  const liveColorTmp = new THREE.Color();
   let activeSceneId = null;
   // clock time the current scene was loaded — update() always sees
   // elapsed-since-load, so every load (including swaps) replays the full
@@ -115,10 +122,11 @@ export function createBackground(canvas) {
       disposeObject3D(currentMesh);
     }
 
-    const { mesh, update, bloom } = entry.factory();
+    const { mesh, update, bloom, paletteCycler } = entry.factory();
     sceneGroup.add(mesh);
     currentMesh = mesh;
     updateField = update;
+    currentPaletteCycler = paletteCycler ?? null;
     activeSceneId = entry.id;
     sceneStartTime = clock.getElapsedTime();
 
@@ -269,6 +277,16 @@ export function createBackground(canvas) {
     }
   });
 
+  // samples a single representative color from the active scene's current
+  // palette — not any specific cube/node's actual color (those all run
+  // their own phase-offset cycles), just "what this scene is on right now"
+  function getLiveColor() {
+    if (!currentPaletteCycler) return "#ffffff";
+    const t = clock.getElapsedTime() * LIVE_DOT_COLOR_SPEED;
+    sampleCyclingColor(currentPaletteCycler.palette, t, liveColorTmp);
+    return `#${liveColorTmp.getHexString()}`;
+  }
+
   return {
     renderer,
     scene,
@@ -276,5 +294,6 @@ export function createBackground(canvas) {
     composer,
     setScene,
     getActiveSceneId: () => activeSceneId,
+    getLiveColor,
   };
 }

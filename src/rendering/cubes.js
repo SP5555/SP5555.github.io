@@ -226,5 +226,5 @@ export function createCubeField({ gridCols = 40, gridRows = 40 } = {}) {
     return inPaletteGlitch;
   }
 
-  return { mesh, update };
+  return { mesh, update, paletteCycler };
 }

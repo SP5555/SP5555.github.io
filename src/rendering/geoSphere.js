@@ -543,5 +543,5 @@ export function createGeoSphereField() {
     return inPaletteGlitch;
   }
 
-  return { mesh: group, update };
+  return { mesh: group, update, paletteCycler };
 }
